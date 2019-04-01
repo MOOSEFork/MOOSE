@@ -1,10 +1,10 @@
 -- This routine is called from the LDT environment to create the Moose.lua file stub for use in .miz files.
 
-local MooseDynamicStatic = arg[1]
-local MooseCommitHash = arg[2]
-local MooseDevelopmentPath = arg[3]
-local MooseSetupPath = arg[4]
-local MooseTargetPath = arg[5]
+local MooseDynamicStatic = "S"
+local MooseCommitHash = "59974ea33eeff34b9c9b6994ac8fdc98e5be0470"
+local MooseDevelopmentPath = "D:/Projekte/MOOSEFork/Moose Development/Moose"
+local MooseSetupPath = "D:/Projekte/MOOSEFork/Moose Setup"
+local MooseTargetPath = "D:/Projekte/MOOSEFork/Moose_Include_Static"
 
 print( "Moose (D)ynamic (S)tatic  : " .. MooseDynamicStatic )
 print( "Commit Hash ID            : " .. MooseCommitHash )
@@ -21,7 +21,7 @@ local LoaderFile = io.open( LoaderFilePath, "w" )
 
 if MooseDynamicStatic == "S" then
   LoaderFile:write( "env.info( '*** MOOSE GITHUB Commit Hash ID: " .. MooseCommitHash .. " ***' )\n" )
-end  
+end
 
 local MooseLoaderPath
 if MooseDynamicStatic == "D" then
@@ -41,7 +41,7 @@ local MooseSourcesFile = io.open( MooseModulesFilePath, "r" )
 local MooseSource = MooseSourcesFile:read("*l")
 
 while( MooseSource ) do
-  
+
   if MooseSource ~= "" then
     MooseSource = string.match( MooseSource, "Scripts/Moose/(.+)'" )
     local MooseFilePath = MooseDevelopmentPath .. "/" .. MooseSource
@@ -53,11 +53,11 @@ while( MooseSource ) do
       local MooseSourceFile = io.open( MooseFilePath, "r" )
       local MooseSourceFileText = MooseSourceFile:read( "*a" )
       MooseSourceFile:close()
-      
+
       LoaderFile:write( MooseSourceFileText )
     end
   end
-  
+
   MooseSource = MooseSourcesFile:read("*l")
 end
 
