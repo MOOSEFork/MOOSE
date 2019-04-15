@@ -2203,7 +2203,7 @@ end
 --   -- Do actions with the GroupPlane object.
 -- end
 function SPAWN:GetLastAliveGroup()
-	self:F( { self.SpawnTemplatePrefix, self.SpawnAliasPrefix } )
+    self:F( { self.SpawnTemplatePrefix, self.SpawnAliasPrefix } )
 
   self.SpawnIndex = self:_GetLastIndex()
   for SpawnIndex = self.SpawnIndex, 1, -1 do

@@ -523,7 +523,7 @@ end
 --- Clears all event subscriptions for a @{Core.Base#BASE} derived object.
 -- @param #EVENT self
 -- @param Core.Base#BASE EventObject
-function EVENT:RemoveAll( EventClass  )
+function EVENT:RemoveAll( EventClass )
   self:F3( { EventClass:GetClassNameAndID() } )
 
   local EventPriority = EventClass:GetEventPriority()
