@@ -93,6 +93,19 @@ do -- world
  
 end -- world
 
+---
+-- The DCS radio enumerator.
+-- 
+-- @type radio
+-- @field #modulation modulation Radio modulation enumeration values.
+ 
+---
+-- Radio modulation enumeration values.
+-- 
+-- @type radio.modulation
+-- @map <#string, #number>
+-- @field #number AM AM radio modulation.
+-- @field #number FM FM radio modulation.
 
 do -- env
 
