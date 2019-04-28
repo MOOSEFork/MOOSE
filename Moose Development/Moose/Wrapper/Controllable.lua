@@ -785,6 +785,24 @@ function CONTROLLABLE:CommandSetCallsign(CallName, CallNumber, Delay)
   return self
 end
 
+---
+-- Make this controllable invisible to other AI forces.
+-- 
+-- @param #CONTROLLABLE self
+-- @param #boolean invisible true: make this controllable invisible to other AI forces. Else make
+--        this controllable visible to other AI forces. Default is false.
+-- @param #number delay (Optional) Delay in seconds before the command is excecuted. Default is immediately.
+-- @return #CONTROLLABLE self        
+function CONTROLLABLE:CommandSetInvisible( invisible, delay )
+  if delay and delay > 0 then
+    SCHEDULER:New( nil, self.CommandSetInvisible, { self, invisible or false }, delay )
+  else  
+    self:SetCommand( { id = 'SetInvisible', params = { value = invisible or false } } )
+  end
+
+  return self
+end
+
 --- Set EPLRS of the CONTROLLABLE on/off. See [DCS command EPLRS](https://wiki.hoggitworld.com/view/DCS_command_eplrs)
 -- @param #CONTROLLABLE self
 -- @param #boolean SwitchOnOff If true (or nil) switch EPLRS on. If false switch off.
