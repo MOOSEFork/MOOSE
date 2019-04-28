@@ -543,6 +543,7 @@ do -- Weapon
 
   --- enum stores weapon flags. Some of them are combination of another flags.
   -- @type Weapon.flag
+  -- @field NoWeapon
   -- @field LGB
   -- @field TvGB
   -- @field SNSGB
