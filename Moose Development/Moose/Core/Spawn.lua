@@ -645,6 +645,21 @@ function SPAWN:InitRadioModulation(modulation)
   return self
 end
 
+--- Set the radio modulation.
+-- @param #SPAWN self
+-- @param DCS#radio.modulation modulation The radio modulation. Default is @{radio.modulation.AM}.
+-- @return #SPAWN self
+function SPAWN:InitRadioModulationEnum( modulation )
+  local mod = radio.modulation.AM
+
+  if modulation == radio.modulation.FM then
+    mod = radio.modulation.FM
+  end
+  
+  self.SpawnInitModu = mod
+  return self
+end
+
 --- Sets the modex of the first unit of the group. If more units are in the group, the number is increased by one with every unit.
 -- @param #SPAWN self
 -- @param #number modex Modex of the first unit.
