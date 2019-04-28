@@ -604,7 +604,7 @@ function GROUP:GetUnit( UnitNumber )
 
   if DCSGroup then
     local DCSUnit = DCSGroup:getUnit( UnitNumber )
-    local UnitFound = UNIT:Find( DCSGroup:getUnit( UnitNumber ) )
+    local UnitFound = UNIT:Find( DCSUnit )
     self:T2( UnitFound )
     return UnitFound
   end
