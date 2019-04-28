@@ -3228,7 +3228,9 @@ end
 function CONTROLLABLE:OptionRTBBingoFuel( RTB ) --R2.2
   self:F2( { self.ControllableName } )
 
-  RTB = RTB or true
+  if RTB == nil then
+    RTB = true
+  end
 
   local DCSControllable = self:GetDCSObject()
   if DCSControllable then
@@ -3237,11 +3239,9 @@ function CONTROLLABLE:OptionRTBBingoFuel( RTB ) --R2.2
     if self:IsAir() then
       Controller:setOption( AI.Option.Air.id.RTB_ON_BINGO, RTB )
     end
-
-    return self
   end
 
-  return nil
+  return self
 end
 
 
