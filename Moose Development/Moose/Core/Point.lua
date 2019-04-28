@@ -465,17 +465,15 @@ do -- COORDINATE
   -- @param #boolean Keepalt If true, keep altitude of original coordinate. Default is that the new coordinate is created at the translated land height.
   -- @return Core.Point#COORDINATE The new calculated COORDINATE.
   function COORDINATE:Translate( Distance, Angle, Keepalt )
-    local SX = self.x
-    local SY = self.z
-    local Radians = (Angle or 0) / 180 * math.pi
-    local TX = Distance * math.cos( Radians ) + SX
-    local TY = Distance * math.sin( Radians ) + SY
-  
-    if Keepalt then
-      return COORDINATE:NewFromVec3( { x = TX, y=self.y, z = TY } )
-    else
-      return COORDINATE:NewFromVec2( { x = TX, y = TY } )
+    local rad = math.rad( Angle )
+    local x = Distance * math.cos( rad ) + self.x
+    local z = Distance * math.sin( rad ) + self.z
+
+    if not Keepalt then
+      return POINT_VEC2:new( x, z, 0 )
     end
+
+    return COORDINATE:New( x, self.y, z )
   end
 
   --- Rotate coordinate in 2D (x,z) space.
@@ -1001,23 +999,6 @@ do -- COORDINATE
     self.y=alt
     return self
   end
-
-  --- Add a Distance in meters from the COORDINATE horizontal plane, with the given angle, and calculate the new COORDINATE.
-  -- @param #COORDINATE self
-  -- @param DCS#Distance Distance The Distance to be added in meters.
-  -- @param DCS#Angle Angle The Angle in degrees.
-  -- @return #COORDINATE The new calculated COORDINATE.
-  function COORDINATE:Translate( Distance, Angle )
-    local SX = self.x
-    local SZ = self.z
-    local Radians = Angle / 180 * math.pi
-    local TX = Distance * math.cos( Radians ) + SX
-    local TZ = Distance * math.sin( Radians ) + SZ
-
-    return COORDINATE:New( TX, self.y, TZ )
-  end
-
-
 
   --- Build an air type route point.
   -- @param #COORDINATE self
