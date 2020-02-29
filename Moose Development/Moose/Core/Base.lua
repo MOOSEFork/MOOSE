@@ -210,7 +210,9 @@ BASE = {
 BASE.__ = {}
 
 --- @field #BASE._
-BASE._ = {}
+BASE._ = {
+  Schedules = {} --- Contains the Schedulers Active
+}
 
 --- The Formation Class
 -- @type FORMATION
@@ -296,7 +298,8 @@ end
 --
 --
 -- @param #BASE self
--- @param #BASE Child is the Child class from which the Parent class needs to be retrieved.
+-- @param #BASE Child This is the Child class from which the Parent class needs to be retrieved.
+-- @param #BASE FromClass (Optional) The class from which to get the parent.
 -- @return #BASE
 function BASE:GetParent( Child, FromClass )
 
@@ -593,15 +596,82 @@ do -- Event Handling
   -- @param Core.Event#EVENTDATA EventData The EventData structure.
 
   --- Occurs when any unit begins firing a weapon that has a high rate of fire. Most common with aircraft cannons (GAU-8), autocannons, and machine guns.
-  -- initiator : The unit that is doing the shooing.
-  -- target: The unit that is being targeted.
+  -- initiator : The unit that is doing the shooting.
+  -- target: The unit that is being targeted. 
   -- @function [parent=#BASE] OnEventShootingStart
   -- @param #BASE self
   -- @param Core.Event#EVENTDATA EventData The EventData structure.
 
   --- Occurs when any unit stops firing its weapon. Event will always correspond with a shooting start event.
-  -- initiator : The unit that was doing the shooing.
+  -- initiator : The unit that was doing the shooting. 
   -- @function [parent=#BASE] OnEventShootingEnd
+  -- @param #BASE self
+  -- @param Core.Event#EVENTDATA EventData The EventData structure.
+
+  --- Occurs when a new mark was added.
+  -- MarkID: ID of the mark. 
+  -- @function [parent=#BASE] OnEventMarkAdded
+  -- @param #BASE self
+  -- @param Core.Event#EVENTDATA EventData The EventData structure.
+
+  --- Occurs when a mark was removed.
+  -- MarkID: ID of the mark. 
+  -- @function [parent=#BASE] OnEventMarkRemoved
+  -- @param #BASE self
+  -- @param Core.Event#EVENTDATA EventData The EventData structure.
+
+  --- Occurs when a mark text was changed.
+  -- MarkID: ID of the mark. 
+  -- @function [parent=#BASE] OnEventMarkChange
+  -- @param #BASE self
+  -- @param Core.Event#EVENTDATA EventData The EventData structure.
+
+
+  --- Unknown precisely what creates this event, likely tied into newer damage model. Will update this page when new information become available.
+  -- 
+  -- * initiator: The unit that had the failure.
+  -- 
+  -- @function [parent=#BASE] OnEventDetailedFailure
+  -- @param #BASE self
+  -- @param Core.Event#EVENTDATA EventData The EventData structure.
+
+  --- Occurs when any modification to the "Score" as seen on the debrief menu would occur. 
+  -- There is no information on what values the score was changed to. Event is likely similar to player_comment in this regard.
+  -- @function [parent=#BASE] OnEventScore
+  -- @param #BASE self
+  -- @param Core.Event#EVENTDATA EventData The EventData structure.
+
+  --- Occurs on the death of a unit. Contains more and different information. Similar to unit_lost it will occur for aircraft before the aircraft crash event occurs.
+  -- 
+  -- * initiator: The unit that killed the target
+  -- * target: Target Object
+  -- * weapon: Weapon Object
+  -- 
+  -- @function [parent=#BASE] OnEventKill
+  -- @param #BASE self
+  -- @param Core.Event#EVENTDATA EventData The EventData structure.
+
+  --- Occurs when any modification to the "Score" as seen on the debrief menu would occur. 
+  -- There is no information on what values the score was changed to. Event is likely similar to player_comment in this regard.
+  -- @function [parent=#BASE] OnEventScore
+  -- @param #BASE self
+  -- @param Core.Event#EVENTDATA EventData The EventData structure.
+
+  --- Occurs when the game thinks an object is destroyed.
+  -- 
+  -- * initiator: The unit that is was destroyed.
+  -- 
+  -- @function [parent=#BASE] OnEventUnitLost
+  -- @param #BASE self
+  -- @param Core.Event#EVENTDATA EventData The EventData structure.
+
+  --- Occurs shortly after the landing animation of an ejected pilot touching the ground and standing up. Event does not occur if the pilot lands in the water and sub combs to Davey Jones Locker.
+  -- 
+  -- * initiator: Static object representing the ejected pilot. Place : Aircraft that the pilot ejected from.
+  -- * place: may not return as a valid object if the aircraft has crashed into the ground and no longer exists.
+  -- * subplace: is always 0 for unknown reasons.
+  -- 
+  -- @function [parent=#BASE] OnEventLandingAfterEjection
   -- @param #BASE self
   -- @param Core.Event#EVENTDATA EventData The EventData structure.
 
@@ -731,7 +801,7 @@ do -- Scheduling
   -- @param #number Start Specifies the amount of seconds that will be waited before the scheduling is started, and the event function is called.
   -- @param #function SchedulerFunction The event function to be called when a timer event occurs. The event function needs to accept the parameters specified in SchedulerArguments.
   -- @param #table ... Optional arguments that can be given as part of scheduler. The arguments need to be given as a table { param1, param 2, ... }.
-  -- @return #number The CallId of the planned schedule.
+  -- @return #number The ScheduleID of the planned schedule.
   function BASE:ScheduleOnce( Start, SchedulerFunction, ... )
     self:F2( { Start } )
     self:T3( { ... } )
@@ -744,11 +814,9 @@ do -- Scheduling
     if not self.Scheduler then
       self.Scheduler = SCHEDULER:New( self )
     end
-
-    self.Scheduler.SchedulerObject = self.Scheduler
-
-    local CallId = _SCHEDULEDISPATCHER:AddSchedule(
-      self.Scheduler,
+  
+    local ScheduleID = _SCHEDULEDISPATCHER:AddSchedule( 
+      self, 
       SchedulerFunction,
       { ... },
       Start,
@@ -757,7 +825,9 @@ do -- Scheduling
       nil
     )
 
-    return CallId
+    self._.Schedules[#self._.Schedules+1] = ScheduleID
+  
+    return self._.Schedules[#self._.Schedules]
   end
 
   --- Schedule a new time event. Note that the schedule will only take place if the scheduler is *started*. Even for a single schedule event, the scheduler needs to be started also.
@@ -768,7 +838,7 @@ do -- Scheduling
   -- @param #number Stop Specifies the amount of seconds when the scheduler will be stopped.
   -- @param #function SchedulerFunction The event function to be called when a timer event occurs. The event function needs to accept the parameters specified in SchedulerArguments.
   -- @param #table ... Optional arguments that can be given as part of scheduler. The arguments need to be given as a table { param1, param 2, ... }.
-  -- @return #number The CallId of the planned schedule.
+  -- @return #number The ScheduleID of the planned schedule.
   function BASE:ScheduleRepeat( Start, Repeat, RandomizeFactor, Stop, SchedulerFunction, ... )
     self:F2( { Start } )
     self:T3( { ... } )
@@ -781,30 +851,32 @@ do -- Scheduling
     if not self.Scheduler then
       self.Scheduler = SCHEDULER:New( self )
     end
-
-    self.Scheduler.SchedulerObject = self.Scheduler
-
-    local CallId = _SCHEDULEDISPATCHER:AddSchedule(
-      self.Scheduler,
+    
+    local ScheduleID = self.Scheduler:Schedule( 
+      self, 
       SchedulerFunction,
       { ... },
       Start,
       Repeat,
       RandomizeFactor,
-      Stop
+      Stop,
+      4
     )
 
-    return CallId
+    self._.Schedules[#self._.Schedules+1] = ScheduleID
+  
+    return self._.Schedules[#self._.Schedules]
   end
 
   --- Stops the Schedule.
   -- @param #BASE self
-  -- @param #number CallId The CallId of the planned schedule.
-  function BASE:ScheduleStop( CallId )
+  -- @param #function SchedulerFunction The event function to be called when a timer event occurs. The event function needs to accept the parameters specified in SchedulerArguments.
+  function BASE:ScheduleStop( SchedulerFunction )
+  
     self:F3( { "ScheduleStop:" } )
 
     if self.Scheduler then
-      _SCHEDULEDISPATCHER:Stop( self.Scheduler, CallId )
+      _SCHEDULEDISPATCHER:Stop( self.Scheduler, self._.Schedules[SchedulerFunction] )
     end
   end
 
@@ -864,6 +936,26 @@ end
 -- Log a trace (only shown when trace is on)
 -- TODO: Make trace function using variable parameters.
 
+--- Set trace on.
+-- @param #BASE self
+-- @usage
+-- -- Switch the tracing On
+-- BASE:TraceOn()
+function BASE:TraceOn()
+  self:TraceOnOff( true )
+end
+
+--- Set trace off.
+-- @param #BASE self
+-- @usage
+-- -- Switch the tracing Off
+-- BASE:TraceOff()
+function BASE:TraceOff()
+  self:TraceOnOff( false )
+end
+
+
+
 --- Set trace on or off
 -- Note that when trace is off, no BASE.Debug statement is performed, increasing performance!
 -- When Moose is loaded statically, (as one file), tracing is switched off by default.
@@ -878,7 +970,13 @@ end
 -- -- Switch the tracing Off
 -- BASE:TraceOnOff( false )
 function BASE:TraceOnOff( TraceOnOff )
-  _TraceOnOff = TraceOnOff
+  if TraceOnOff==false then
+    self:I( "Tracing in MOOSE is OFF" )
+    _TraceOnOff = false
+  else
+  self:I( "Tracing in MOOSE is ON" )
+    _TraceOnOff = true
+  end
 end
 
 
@@ -898,21 +996,25 @@ end
 -- @param #BASE self
 -- @param #number Level
 function BASE:TraceLevel( Level )
-  _TraceLevel = Level
-  self:E( "Tracing level " .. Level )
+  _TraceLevel = Level or 1
+  self:I( "Tracing level " .. _TraceLevel )
 end
 
 --- Trace all methods in MOOSE
 -- @param #BASE self
 -- @param #boolean TraceAll true = trace all methods in MOOSE.
 function BASE:TraceAll( TraceAll )
-
-  _TraceAll = TraceAll
-
-  if _TraceAll then
-    self:E( "Tracing all methods in MOOSE " )
+  
+  if TraceAll==false then
+    _TraceAll=false
   else
-    self:E( "Switched off tracing all methods in MOOSE" )
+    _TraceAll = true
+  end
+  
+  if _TraceAll then
+    self:I( "Tracing all methods in MOOSE " )
+  else
+    self:I( "Switched off tracing all methods in MOOSE" )
   end
 end
 
@@ -922,7 +1024,7 @@ end
 function BASE:TraceClass( Class )
   _TraceClass[Class] = true
   _TraceClassMethod[Class] = {}
-  self:E( "Tracing class " .. Class )
+  self:I( "Tracing class " .. Class )
 end
 
 --- Set tracing for a specific method of  class
@@ -935,7 +1037,7 @@ function BASE:TraceClassMethod( Class, Method )
     _TraceClassMethod[Class].Method = {}
   end
   _TraceClassMethod[Class].Method[Method] = true
-  self:E( "Tracing method " .. Method .. " of class " .. Class )
+  self:I( "Tracing method " .. Method .. " of class " .. Class )
 end
 
 --- Trace a function call. This function is private.
@@ -962,7 +1064,7 @@ function BASE:_F( Arguments, DebugInfoCurrentParam, DebugInfoFromParam )
       if DebugInfoFrom then
         LineFrom = DebugInfoFrom.currentline
       end
-      env.info( string.format( "%6d(%6d)/%1s:%20s%05d.%s(%s)" , LineCurrent, LineFrom, "F", self.ClassName, self.ClassID, Function, routines.utils.oneLineSerialize( Arguments ) ) )
+      env.info( string.format( "%6d(%6d)/%1s:%30s%05d.%s(%s)" , LineCurrent, LineFrom, "F", self.ClassName, self.ClassID, Function, routines.utils.oneLineSerialize( Arguments ) ) )
     end
   end
 end
@@ -1033,11 +1135,11 @@ function BASE:_T( Arguments, DebugInfoCurrentParam, DebugInfoFromParam )
       if DebugInfoCurrent.currentline then
         LineCurrent = DebugInfoCurrent.currentline
       end
-        local LineFrom = 0
-        if DebugInfoFrom then
-          LineFrom = DebugInfoFrom.currentline
-      end
-        env.info( string.format( "%6d(%6d)/%1s:%20s%05d.%s" , LineCurrent, LineFrom, "T", self.ClassName, self.ClassID, routines.utils.oneLineSerialize( Arguments ) ) )
+  		local LineFrom = 0
+  		if DebugInfoFrom then
+  		  LineFrom = DebugInfoFrom.currentline
+  	  end
+  		env.info( string.format( "%6d(%6d)/%1s:%30s%05d.%s" , LineCurrent, LineFrom, "T", self.ClassName, self.ClassID, routines.utils.oneLineSerialize( Arguments ) ) )
     end
     end
 end
@@ -1094,23 +1196,23 @@ end
 function BASE:E( Arguments )
 
   if BASE.Debug then
-    local DebugInfoCurrent = BASE.Debug.getinfo( 2, "nl" )
-    local DebugInfoFrom = BASE.Debug.getinfo( 3, "l" )
-
-    local Function = "function"
-    if DebugInfoCurrent.name then
-        Function = DebugInfoCurrent.name
-    end
-
-    local LineCurrent = DebugInfoCurrent.currentline
-    local LineFrom = -1
-    if DebugInfoFrom then
-      LineFrom = DebugInfoFrom.currentline
-    end
-
-    env.info( string.format( "%6d(%6d)/%1s:%20s%05d.%s(%s)" , LineCurrent, LineFrom, "E", self.ClassName, self.ClassID, Function, routines.utils.oneLineSerialize( Arguments ) ) )
+  	local DebugInfoCurrent = BASE.Debug.getinfo( 2, "nl" )
+  	local DebugInfoFrom = BASE.Debug.getinfo( 3, "l" )
+  	
+  	local Function = "function"
+  	if DebugInfoCurrent.name then
+  		Function = DebugInfoCurrent.name
+  	end
+  
+  	local LineCurrent = DebugInfoCurrent.currentline
+    local LineFrom = -1 
+  	if DebugInfoFrom then
+  	  LineFrom = DebugInfoFrom.currentline
+  	end
+  
+  	env.info( string.format( "%6d(%6d)/%1s:%30s%05d.%s(%s)" , LineCurrent, LineFrom, "E", self.ClassName, self.ClassID, Function, routines.utils.oneLineSerialize( Arguments ) ) )
   else
-    env.info( string.format( "%1s:%20s%05d(%s)" , "E", self.ClassName, self.ClassID, routines.utils.oneLineSerialize( Arguments ) ) )
+    env.info( string.format( "%1s:%30s%05d(%s)" , "E", self.ClassName, self.ClassID, routines.utils.oneLineSerialize( Arguments ) ) )
   end
 
 end
@@ -1135,10 +1237,10 @@ function BASE:I( Arguments )
     if DebugInfoFrom then
       LineFrom = DebugInfoFrom.currentline
     end
-
-    env.info( string.format( "%6d(%6d)/%1s:%20s%05d.%s(%s)" , LineCurrent, LineFrom, "I", self.ClassName, self.ClassID, Function, routines.utils.oneLineSerialize( Arguments ) ) )
+  
+    env.info( string.format( "%6d(%6d)/%1s:%30s%05d.%s(%s)" , LineCurrent, LineFrom, "I", self.ClassName, self.ClassID, Function, routines.utils.oneLineSerialize( Arguments ) ) )
   else
-    env.info( string.format( "%1s:%20s%05d(%s)" , "I", self.ClassName, self.ClassID, routines.utils.oneLineSerialize( Arguments ) ) )
+    env.info( string.format( "%1s:%30s%05d(%s)" , "I", self.ClassName, self.ClassID, routines.utils.oneLineSerialize( Arguments ) ) )
   end
 
 end

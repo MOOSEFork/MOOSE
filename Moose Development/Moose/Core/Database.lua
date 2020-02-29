@@ -81,6 +81,7 @@ DATABASE = {
   HITS = {},
   DESTROYS = {},
   ZONES = {},
+  ZONES_GOAL = {},
 }
 
 local _DATABASECoalition =
@@ -186,6 +187,7 @@ end
 function DATABASE:AddUnit( DCSUnitName )
 
   if not  self.UNITS[DCSUnitName] then
+    self:T( { "Add UNIT:", DCSUnitName } )
     local UnitRegister = UNIT:Register( DCSUnitName )
     self.UNITS[DCSUnitName] = UNIT:Register( DCSUnitName )
 
@@ -245,12 +247,15 @@ end
 
 --- Adds a Airbase based on the Airbase Name in the DATABASE.
 -- @param #DATABASE self
--- @param #string AirbaseName The name of the airbase
+-- @param #string AirbaseName The name of the airbase.
+-- @return Wrapper.Airbase#AIRBASE Airbase object.
 function DATABASE:AddAirbase( AirbaseName )
 
   if not self.AIRBASES[AirbaseName] then
     self.AIRBASES[AirbaseName] = AIRBASE:Register( AirbaseName )
   end
+  
+  return self.AIRBASES[AirbaseName]
 end
 
 
@@ -305,16 +310,6 @@ do -- Zones
     self.ZONES[ZoneName] = nil
   end
 
-  --- Finds an @{Zone} based on the zone name in the DATABASE.
-  -- @param #DATABASE self
-  -- @param #string ZoneName
-  -- @return Core.Zone#ZONE_BASE The found @{Zone}.
-  function DATABASE:FindZone( ZoneName )
-
-    local ZoneFound = self.ZONES[ZoneName]
-    return ZoneFound
-  end
-
 
   --- Private method that registers new ZONE_BASE derived objects within the DATABASE Object.
   -- @param #DATABASE self
@@ -348,7 +343,39 @@ do -- Zones
 
 end -- zone
 
+do -- Zone_Goal
 
+  --- Finds a @{Zone} based on the zone name.
+  -- @param #DATABASE self
+  -- @param #string ZoneName The name of the zone.
+  -- @return Core.Zone#ZONE_BASE The found ZONE.
+  function DATABASE:FindZoneGoal( ZoneName )
+  
+    local ZoneFound = self.ZONES_GOAL[ZoneName]
+    return ZoneFound
+  end
+  
+  --- Adds a @{Zone} based on the zone name in the DATABASE.
+  -- @param #DATABASE self
+  -- @param #string ZoneName The name of the zone.
+  -- @param Core.Zone#ZONE_BASE Zone The zone.
+  function DATABASE:AddZoneGoal( ZoneName, Zone )
+  
+    if not self.ZONES_GOAL[ZoneName] then
+      self.ZONES_GOAL[ZoneName] = Zone
+    end
+  end
+  
+  
+  --- Deletes a @{Zone} from the DATABASE based on the zone name.
+  -- @param #DATABASE self
+  -- @param #string ZoneName The name of the zone.
+  function DATABASE:DeleteZoneGoal( ZoneName )
+  
+    self.ZONES_GOAL[ZoneName] = nil 
+  end
+
+end -- Zone_Goal
 do -- cargo
 
   --- Adds a Cargo based on the Cargo Name in the DATABASE.
@@ -485,7 +512,7 @@ end
 function DATABASE:AddGroup( GroupName )
 
   if not self.GROUPS[GroupName] then
-    self:I( { "Add GROUP:", GroupName } )
+    self:T( { "Add GROUP:", GroupName } )
     self.GROUPS[GroupName] = GROUP:Register( GroupName )
   end
 
@@ -497,7 +524,7 @@ end
 function DATABASE:AddPlayer( UnitName, PlayerName )
 
   if PlayerName then
-    self:I( { "Add player for unit:", UnitName, PlayerName } )
+    self:T( { "Add player for unit:", UnitName, PlayerName } )
     self.PLAYERS[PlayerName] = UnitName
     self.PLAYERUNITS[PlayerName] = self:FindUnit( UnitName )
     self.PLAYERSJOINED[PlayerName] = PlayerName
@@ -509,7 +536,7 @@ end
 function DATABASE:DeletePlayer( UnitName, PlayerName )
 
   if PlayerName then
-    self:I( { "Clean player:", PlayerName } )
+    self:T( { "Clean player:", PlayerName } )
     self.PLAYERS[PlayerName] = nil
     self.PLAYERUNITS[PlayerName] = nil
   end
@@ -674,11 +701,11 @@ function DATABASE:_RegisterGroupTemplate( GroupTemplate, CoalitionSide, Category
     UnitNames[#UnitNames+1] = self.Templates.Units[UnitTemplate.name].UnitName
   end
 
-  self:I( { Group = self.Templates.Groups[GroupTemplateName].GroupName,
+  self:T( { Group     = self.Templates.Groups[GroupTemplateName].GroupName,
             Coalition = self.Templates.Groups[GroupTemplateName].CoalitionID,
-            Category = self.Templates.Groups[GroupTemplateName].CategoryID,
-            Country = self.Templates.Groups[GroupTemplateName].CountryID,
-            Units = UnitNames
+            Category  = self.Templates.Groups[GroupTemplateName].CategoryID,
+            Country   = self.Templates.Groups[GroupTemplateName].CountryID,
+            Units     = UnitNames
           }
         )
 end
@@ -822,10 +849,10 @@ function DATABASE:_RegisterGroupsAndUnits()
 
     end
   end
-
-  self:I("Groups:")
+  
+  self:T("Groups:")
   for GroupName, Group in pairs( self.GROUPS ) do
-    self:I( { "Group:", GroupName } )
+    self:T( { "Group:", GroupName } )
   end
 
   return self
@@ -837,7 +864,7 @@ end
 function DATABASE:_RegisterClients()
 
   for ClientName, ClientTemplate in pairs( self.Templates.ClientsByName ) do
-    self:I( { "Register Client:", ClientName } )
+    self:T( { "Register Client:", ClientName } )
     self:AddClient( ClientName )
   end
 
@@ -854,8 +881,8 @@ function DATABASE:_RegisterStatics()
 
       if DCSStatic:isExist() then
         local DCSStaticName = DCSStatic:getName()
-
-        self:I( { "Register Static:", DCSStaticName } )
+  
+        self:T( { "Register Static:", DCSStaticName } )
         self:AddStatic( DCSStaticName )
       else
         self:E( { "Static does not exist: ",  DCSStatic } )
@@ -869,16 +896,29 @@ end
 --- @param #DATABASE self
 function DATABASE:_RegisterAirbases()
 
+  --[[
   local CoalitionsData = { AirbasesRed = coalition.getAirbases( coalition.side.RED ), AirbasesBlue = coalition.getAirbases( coalition.side.BLUE ), AirbasesNeutral = coalition.getAirbases( coalition.side.NEUTRAL ) }
   for CoalitionId, CoalitionData in pairs( CoalitionsData ) do
     for DCSAirbaseId, DCSAirbase in pairs( CoalitionData ) do
 
       local DCSAirbaseName = DCSAirbase:getName()
 
-      self:I( { "Register Airbase:", DCSAirbaseName, DCSAirbase:getID() } )
+      self:T( { "Register Airbase:", DCSAirbaseName, DCSAirbase:getID() } )
       self:AddAirbase( DCSAirbaseName )
     end
   end
+  ]]
+
+ for DCSAirbaseId, DCSAirbase in pairs(world.getAirbases()) do
+      local DCSAirbaseName = DCSAirbase:getName()
+      
+      -- This gives the incorrect value to be inserted into the airdromeID for DCS 2.5.6!
+      local airbaseID=DCSAirbase:getID()
+      
+      local airbase=self:AddAirbase( DCSAirbaseName )
+      
+      self:I(string.format("Register Airbase: %s, getID=%d, GetID=%d (unique=%d)", DCSAirbaseName, DCSAirbase:getID(), airbase:GetID(), airbase:GetID(true)))  
+  end  
 
   return self
 end
@@ -890,7 +930,7 @@ end
 -- @param #DATABASE self
 -- @param Core.Event#EVENTDATA Event
 function DATABASE:_EventOnBirth( Event )
-  self:F2( { Event } )
+  self:F( { Event } )
 
   if Event.IniDCSUnit then
     if Event.IniObjectCategory == 3 then
@@ -899,6 +939,12 @@ function DATABASE:_EventOnBirth( Event )
       if Event.IniObjectCategory == 1 then
         self:AddUnit( Event.IniDCSUnitName )
         self:AddGroup( Event.IniDCSGroupName )
+        -- Add airbase if it was spawned later in the mission.
+        local DCSAirbase = Airbase.getByName(Event.IniDCSUnitName)
+        if DCSAirbase then
+          self:I(string.format("Adding airbase %s", tostring(Event.IniDCSUnitName)))
+          self:AddAirbase(Event.IniDCSUnitName)
+        end
       end
     end
     if Event.IniObjectCategory == 1 then
@@ -907,6 +953,7 @@ function DATABASE:_EventOnBirth( Event )
       local PlayerName = Event.IniUnit:GetPlayerName()
       if PlayerName then
         self:I( { "Player Joined:", PlayerName } )
+        self:AddClient( Event.IniDCSUnitName )
         if not self.PLAYERS[PlayerName] then
           self:AddPlayer( Event.IniUnitName, PlayerName )
         end
@@ -1027,8 +1074,9 @@ function DATABASE:ForEach( IteratorFunction, FinalizeFunction, arg, Set )
     return false
   end
 
-  local Scheduler = SCHEDULER:New( self, Schedule, {}, 0.001, 0.001, 0 )
-
+  --local Scheduler = SCHEDULER:New( self, Schedule, {}, 0.001, 0.001, 0 )
+  Schedule()
+  
   return self
 end
 
@@ -1166,7 +1214,7 @@ function DATABASE:OnEventNewZone( EventData )
   self:F2( { EventData } )
 
   if EventData.Zone then
-    self:AddZone( EventData.Zone )
+    self:AddZone( EventData.Zone.ZoneName, EventData.Zone )
   end
 end
 
@@ -1211,9 +1259,9 @@ end
 function DATABASE:_RegisterTemplates()
   self:F2()
 
-  self.NavPoints = {}
+  self.Navpoints = {}
   self.UNITS = {}
-  --Build routines.db.units and self.NavPoints
+  --Build routines.db.units and self.Navpoints
   for CoalitionName, coa_data in pairs(env.mission.coalition) do
     self:T({CoalitionName=CoalitionName})
 
@@ -1222,7 +1270,7 @@ function DATABASE:_RegisterTemplates()
       
       local CoalitionSide = coalition.side[string.upper(CoalitionName)]
       if CoalitionName=="red" then
-        CoalitionSide=coalition.side.NEUTRAL
+        CoalitionSide=coalition.side.RED
       elseif CoalitionName=="blue" then
         CoalitionSide=coalition.side.BLUE
       else
@@ -1230,18 +1278,18 @@ function DATABASE:_RegisterTemplates()
       end
 
       -- build nav points DB
-      self.NavPoints[CoalitionName] = {}
+      self.Navpoints[CoalitionName] = {}
       if coa_data.nav_points then --navpoints
         for nav_ind, nav_data in pairs(coa_data.nav_points) do
 
           if type(nav_data) == 'table' then
-            self.NavPoints[CoalitionName][nav_ind] = routines.utils.deepCopy(nav_data)
+            self.Navpoints[CoalitionName][nav_ind] = routines.utils.deepCopy(nav_data)
 
-            self.NavPoints[CoalitionName][nav_ind]['name'] = nav_data.callsignStr  -- name is a little bit more self-explanatory.
-            self.NavPoints[CoalitionName][nav_ind]['point'] = {}  -- point is used by SSE, support it.
-            self.NavPoints[CoalitionName][nav_ind]['point']['x'] = nav_data.x
-            self.NavPoints[CoalitionName][nav_ind]['point']['y'] = 0
-            self.NavPoints[CoalitionName][nav_ind]['point']['z'] = nav_data.y
+            self.Navpoints[CoalitionName][nav_ind]['name'] = nav_data.callsignStr  -- name is a little bit more self-explanatory.
+            self.Navpoints[CoalitionName][nav_ind]['point'] = {}  -- point is used by SSE, support it.
+            self.Navpoints[CoalitionName][nav_ind]['point']['x'] = nav_data.x
+            self.Navpoints[CoalitionName][nav_ind]['point']['y'] = 0
+            self.Navpoints[CoalitionName][nav_ind]['point']['z'] = nav_data.y
           end
         end
       end

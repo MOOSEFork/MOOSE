@@ -78,7 +78,7 @@ CALLSIGN={
   },
   -- AWACS
   AWACS={
-    Overloard=1,
+    Overlord=1,
     Magic=2,
     Wizard=3,
     Focus=4,
@@ -429,15 +429,16 @@ UTILS.tostringLL = function( lat, lon, acc, DMS)
 
     local secFrmtStr -- create the formatting string for the seconds place
     secFrmtStr = '%02d'
---    if acc <= 0 then  -- no decimal place.
---      secFrmtStr = '%02d'
---    else
---      local width = 3 + acc  -- 01.310 - that's a width of 6, for example.
---      secFrmtStr = '%0' .. width .. '.' .. acc .. 'f'
---    end
+    if acc <= 0 then  -- no decimal place.
+      secFrmtStr = '%02d'
+    else
+      local width = 3 + acc  -- 01.310 - that's a width of 6, for example. Acc is limited to 2 for DMS!
+      secFrmtStr = '%0' .. width .. '.' .. acc .. 'f'
+    end
 
-    return string.format('%03d', latDeg) .. ' ' .. string.format('%02d', latMin) .. '\' ' .. string.format(secFrmtStr, latSec) .. '"' .. latHemi .. '   '
-           .. string.format('%03d', lonDeg) .. ' ' .. string.format('%02d', lonMin) .. '\' ' .. string.format(secFrmtStr, lonSec) .. '"' .. lonHemi
+    -- 024� 23' 12"N or 024� 23' 12.03"N
+    return string.format('%03d°', latDeg) .. ' ' .. string.format('%02d', latMin) .. '\' ' .. string.format(secFrmtStr, latSec) .. '"' .. latHemi .. '   '
+        .. string.format('%03d°', lonDeg) .. ' ' .. string.format('%02d', lonMin) .. '\' ' .. string.format(secFrmtStr, lonSec) .. '"' .. lonHemi
 
   else  -- degrees, decimal minutes.
     latMin = UTILS.Round(latMin, acc)
@@ -461,20 +462,40 @@ UTILS.tostringLL = function( lat, lon, acc, DMS)
       minFrmtStr = '%0' .. width .. '.' .. acc .. 'f'
     end
 
-    return string.format('%03d', latDeg) .. ' ' .. string.format(minFrmtStr, latMin) .. '\'' .. latHemi .. '   '
-     .. string.format('%03d', lonDeg) .. ' ' .. string.format(minFrmtStr, lonMin) .. '\'' .. lonHemi
+    -- 024 23'N or 024 23.123'N
+    return string.format('%03d°', latDeg) .. ' ' .. string.format(minFrmtStr, latMin) .. '\'' .. latHemi .. '   '
+        .. string.format('%03d°', lonDeg) .. ' ' .. string.format(minFrmtStr, lonMin) .. '\'' .. lonHemi
 
   end
 end
 
 -- acc- the accuracy of each easting/northing.  0, 1, 2, 3, 4, or 5.
 UTILS.tostringMGRS = function(MGRS, acc) --R2.1
+
   if acc == 0 then
     return MGRS.UTMZone .. ' ' .. MGRS.MGRSDigraph
   else
-    return MGRS.UTMZone .. ' ' .. MGRS.MGRSDigraph .. ' ' .. string.format('%0' .. acc .. 'd', UTILS.Round(MGRS.Easting/(10^(5-acc)), 0))
-           .. ' ' .. string.format('%0' .. acc .. 'd', UTILS.Round(MGRS.Northing/(10^(5-acc)), 0))
+
+    -- Test if Easting/Northing have less than 4 digits.
+    --MGRS.Easting=123    -- should be 00123
+    --MGRS.Northing=5432  -- should be 05432
+    
+    -- Truncate rather than round MGRS grid!
+    local Easting=tostring(MGRS.Easting)
+    local Northing=tostring(MGRS.Northing)
+    
+    -- Count number of missing digits. Easting/Northing should have 5 digits. However, it is passed as a number. Therefore, any leading zeros would not be displayed by lua.
+    local nE=5-string.len(Easting) 
+    local nN=5-string.len(Northing)
+    
+    -- Get leading zeros (if any).
+    for i=1,nE do Easting="0"..Easting end
+    for i=1,nN do Northing="0"..Northing end
+    
+    -- Return MGRS string.
+    return string.format("%s %s %s %s", MGRS.UTMZone, MGRS.MGRSDigraph, string.sub(Easting, 1, acc), string.sub(Northing, 1, acc))
   end
+  
 end
 
 
@@ -515,6 +536,32 @@ function UTILS.spairs( t, order )
         i = i + 1
         if keys[i] then
             return keys[i], t[keys[i]]
+        end
+    end
+end
+
+
+-- Here is a customized version of pairs, which I called kpairs because it iterates over the table in a sorted order, based on a function that will determine the keys as reference first.
+function UTILS.kpairs( t, getkey, order )
+    -- collect the keys
+    local keys = {}
+    local keyso = {}
+    for k, o in pairs(t) do keys[#keys+1] = k keyso[#keyso+1] = getkey( o ) end
+
+    -- if order function given, sort by it by passing the table and keys a, b,
+    -- otherwise just sort the keys 
+    if order then
+        table.sort(keys, function(a,b) return order(t, a, b) end)
+    else
+        table.sort(keys)
+    end
+
+    -- return the iterator function
+    local i = 0
+    return function()
+        i = i + 1
+        if keys[i] then
+            return keyso[i], t[keys[i]]
         end
     end
 end
@@ -631,8 +678,9 @@ end
 
 --- Convert time in seconds to hours, minutes and seconds.
 -- @param #number seconds Time in seconds, e.g. from timer.getAbsTime() function.
+-- @param #boolean short (Optional) If true, use short output, i.e. (HH:)MM:SS without day.
 -- @return #string Time in format Hours:Minutes:Seconds+Days (HH:MM:SS+D).
-function UTILS.SecondsToClock(seconds)
+function UTILS.SecondsToClock(seconds, short)
   
   -- Nil check.
   if seconds==nil then
@@ -652,7 +700,15 @@ function UTILS.SecondsToClock(seconds)
     local mins  = string.format("%02.f", math.floor(_seconds/60 - (hours*60)))
     local secs  = string.format("%02.f", math.floor(_seconds - hours*3600 - mins *60))
     local days  = string.format("%d", seconds/(60*60*24))
-    return hours..":"..mins..":"..secs.."+"..days
+    local clock=hours..":"..mins..":"..secs.."+"..days
+    if short then
+      if hours=="00" then
+        clock=mins..":"..secs
+      else
+        clock=hours..":"..mins..":"..secs
+      end
+    end
+    return clock
   end
 end
 
@@ -820,7 +876,18 @@ end
 -- @param DCS#Vec3 b Vector in 3D with x, y, z components.
 -- @return #number Angle alpha between and b in degrees. alpha=acos(a*b)/(|a||b|), (* denotes the dot product). 
 function UTILS.VecAngle(a, b)
-  local alpha=math.acos(UTILS.VecDot(a,b)/(UTILS.VecNorm(a)*UTILS.VecNorm(b)))
+
+  local cosalpha=UTILS.VecDot(a,b)/(UTILS.VecNorm(a)*UTILS.VecNorm(b))
+  
+  local alpha=0
+  if cosalpha>=0.9999999999 then  --acos(1) is not defined.
+    alpha=0
+  elseif cosalpha<=-0.999999999 then --acos(-1) is not defined.
+    alpha=math.pi
+  else
+    alpha=math.acos(cosalpha)
+  end 
+  
   return math.deg(alpha)
 end
 
@@ -833,6 +900,25 @@ function UTILS.VecHdg(a)
     h=h+360
   end
   return h
+end
+
+--- Calculate the difference between two "heading", i.e. angles in [0,360) deg.
+-- @param #number h1 Heading one.
+-- @param #number h2 Heading two.
+-- @return #number Heading difference in degrees.
+function UTILS.HdgDiff(h1, h2)
+
+  -- Angle in rad.
+  local alpha= math.rad(tonumber(h1))
+  local beta = math.rad(tonumber(h2))
+      
+  -- Runway vector.
+  local v1={x=math.cos(alpha), y=0, z=math.sin(alpha)}
+  local v2={x=math.cos(beta),  y=0, z=math.sin(beta)}
+
+  local delta=UTILS.VecAngle(v1, v2)
+  
+  return math.abs(delta)
 end
 
 
@@ -957,3 +1043,60 @@ function UTILS.FileExists(file)
     return nil
   end  
 end
+
+--- Checks the current memory usage collectgarbage("count"). Info is printed to the DCS log file. Time stamp is the current mission runtime.
+-- @param #boolean output If true, print to DCS log file. 
+-- @return #number Memory usage in kByte. 
+function UTILS.CheckMemory(output)
+  local time=timer.getTime()
+  local clock=UTILS.SecondsToClock(time)
+  local mem=collectgarbage("count")
+  if output then
+    env.info(string.format("T=%s  Memory usage %d kByte = %.2f MByte", clock, mem, mem/1024))
+  end
+  return mem
+end
+
+
+--- Get the coalition name from its numerical ID, e.g. coaliton.side.RED.
+-- @param #number Coalition The coalition ID.
+-- @return #string The coalition name, i.e. "Neutral", "Red" or "Blue" (or "Unknown").
+function UTILS.GetCoalitionName(Coalition)
+
+  if Coalition then
+    if Coalition==coalition.side.BLUE then
+      return "Blue"
+    elseif Coalition==coalition.side.RED then
+      return "Red"
+    elseif Coalition==coalition.side.NEUTRAL then
+      return "Neutral"
+    else
+      return "Unknown"
+    end
+  else
+    return "Unknown"
+  end
+    
+end
+
+--- Get the modulation name from its numerical value.
+-- @param #number Modulation The modulation enumerator number. Can be either 0 or 1.
+-- @return #string The modulation name, i.e. "AM"=0 or "FM"=1. Anything else will return "Unknown".
+function UTILS.GetModulationName(Modulation)
+
+  if Modulation then
+    if Modulation==0  then
+      return "AM"
+    elseif Modulation==1  then
+      return "FM"
+    else
+      return "Unknown"
+    end
+  else
+    return "Unknown"
+  end
+    
+end
+
+
+-- Just a test to see commits in new environment for Wingthor

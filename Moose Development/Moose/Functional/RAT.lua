@@ -242,7 +242,7 @@
 -- * AIRBASE.TerminalType.OpenMed: Open/Shelter air airplane only.
 -- * AIRBASE.TerminalType.OpenBig: Open air spawn points. Generally larger but does not guarantee large aircraft are capable of spawning there.
 -- * AIRBASE.TerminalType.OpenMedOrBig: Combines OpenMed and OpenBig spots.
--- * AIRBASE.TerminalType.HelicopterUnsable: Combines HelicopterOnly, OpenMed and OpenBig.
+-- * AIRBASE.TerminalType.HelicopterUsable: Combines HelicopterOnly, OpenMed and OpenBig.
 -- * AIRBASE.TerminalType.FighterAircraft: Combines Shelter, OpenMed and OpenBig spots. So effectively all spots usable by fixed wing aircraft.
 -- 
 -- So for example
@@ -550,7 +550,7 @@ RAT.id="RAT | "
 --- RAT version.
 -- @list version
 RAT.version={
-  version = "2.3.7",
+  version = "2.3.9",
   print = true,
 }
 
@@ -3392,11 +3392,19 @@ function RAT:_GetAirportsOfMap()
       local _name=airbase:getName()
       local _myab=AIRBASE:FindByName(_name)
       
-      -- Add airport to table.
-      table.insert(self.airports_map, _myab)
+      if _myab then
       
-      local text="MOOSE: Airport ID = ".._myab:GetID().." and Name = ".._myab:GetName()..", Category = ".._myab:GetCategory()..", TypeName = ".._myab:GetTypeName()
-      self:T(RAT.id..text)
+        -- Add airport to table.
+        table.insert(self.airports_map, _myab)
+        
+        local text="MOOSE: Airport ID = ".._myab:GetID().." and Name = ".._myab:GetName()..", Category = ".._myab:GetCategory()..", TypeName = ".._myab:GetTypeName()
+        self:T(RAT.id..text)
+        
+      else
+      
+        self:E(RAT.id..string.format("WARNING: Airbase %s does not exsist as MOOSE object!", tostring(_name)))
+      
+      end
     end
     
   end
@@ -3408,7 +3416,7 @@ function RAT:_GetAirportsOfCoalition()
   for _,coalition in pairs(self.ctable) do
     for _,_airport in pairs(self.airports_map) do
       local airport=_airport --Wrapper.Airbase#AIRBASE
-      local category=airport:GetDesc().category
+      local category=airport:GetAirbaseCategory()
       if airport:GetCoalition()==coalition then
         -- Planes cannot land on FARPs.
         --local condition1=self.category==RAT.cat.plane and airport:GetTypeName()=="FARP"
@@ -3839,7 +3847,7 @@ function RAT:_OnBirth(EventData)
         
         -- Check if any unit of the group was spawned on top of another unit in the MOOSE data base.
         local ontop=false
-        if self.checkontop and (_airbase and _airbase:GetDesc().category==Airbase.Category.AIRDROME) then
+        if self.checkontop and (_airbase and _airbase:GetAirbaseCategory()==Airbase.Category.AIRDROME) then
           ontop=self:_CheckOnTop(SpawnGroup, self.ontopradius)
         end
         
@@ -4449,7 +4457,7 @@ function RAT:_Waypoint(index, description, Type, Coord, Speed, Altitude, Airport
   
   if (Airport~=nil) and (Type~=RAT.wp.air) then
     local AirbaseID = Airport:GetID()
-    local AirbaseCategory = Airport:GetDesc().category
+    local AirbaseCategory = Airport:GetAirbaseCategory()
     if AirbaseCategory == Airbase.Category.SHIP then
       RoutePoint.linkUnit = AirbaseID
       RoutePoint.helipadId = AirbaseID
@@ -5133,7 +5141,7 @@ function RAT:_ModifySpawnTemplate(waypoints, livery, spawnplace, departure, take
   local spawnonrunway=false
   local spawnonairport=false
   if spawnonground then
-    local AirbaseCategory = departure:GetDesc().category      
+    local AirbaseCategory = departure:GetAirbaseCategory()  
     if AirbaseCategory == Airbase.Category.SHIP then
       spawnonship=true
     elseif AirbaseCategory == Airbase.Category.HELIPAD then
@@ -5165,6 +5173,7 @@ function RAT:_ModifySpawnTemplate(waypoints, livery, spawnplace, departure, take
       if self.uncontrolled then
         -- This is used in the SPAWN:SpawnWithIndex() function. Some values are overwritten there!
         self.SpawnUnControlled=true
+        SpawnTemplate.uncontrolled=true
       end
       
       -- Number of units in the group. With grouping this can actually differ from the template group size!

@@ -173,6 +173,62 @@ GROUPTEMPLATE.Takeoff = {
   [GROUP.Takeoff.Cold] =    { "TakeOffParking", "From Parking Area" }
 }
 
+--- Generalized group attributes. See [DCS attributes](https://wiki.hoggitworld.com/view/DCS_enum_attributes) on hoggit.
+-- @type GROUP.Attribute
+-- @field #string AIR_TRANSPORTPLANE Airplane with transport capability. This can be used to transport other assets.
+-- @field #string AIR_AWACS Airborne Early Warning and Control System.
+-- @field #string AIR_FIGHTER Fighter, interceptor, ... airplane.
+-- @field #string AIR_BOMBER Aircraft which can be used for strategic bombing.
+-- @field #string AIR_TANKER Airplane which can refuel other aircraft.
+-- @field #string AIR_TRANSPORTHELO Helicopter with transport capability. This can be used to transport other assets.
+-- @field #string AIR_ATTACKHELO Attack helicopter.
+-- @field #string AIR_UAV Unpiloted Aerial Vehicle, e.g. drones.
+-- @field #string AIR_OTHER Any airborne unit that does not fall into any other airborne category.
+-- @field #string GROUND_APC Infantry carriers, in particular Amoured Personell Carrier. This can be used to transport other assets.
+-- @field #string GROUND_TRUCK Unarmed ground vehicles, which has the DCS "Truck" attribute.
+-- @field #string GROUND_INFANTRY Ground infantry assets.
+-- @field #string GROUND_ARTILLERY Artillery assets.
+-- @field #string GROUND_TANK Tanks (modern or old).
+-- @field #string GROUND_TRAIN Trains. Not that trains are **not** yet properly implemented in DCS and cannot be used currently.
+-- @field #string GROUND_EWR Early Warning Radar.
+-- @field #string GROUND_AAA Anti-Aircraft Artillery.
+-- @field #string GROUND_SAM Surface-to-Air Missile system or components.
+-- @field #string GROUND_OTHER Any ground unit that does not fall into any other ground category.
+-- @field #string NAVAL_AIRCRAFTCARRIER Aircraft carrier.
+-- @field #string NAVAL_WARSHIP War ship, i.e. cruisers, destroyers, firgates and corvettes.
+-- @field #string NAVAL_ARMEDSHIP Any armed ship that is not an aircraft carrier, a cruiser, destroyer, firgatte or corvette.
+-- @field #string NAVAL_UNARMEDSHIP Any unarmed naval vessel.
+-- @field #string NAVAL_OTHER Any naval unit that does not fall into any other naval category.
+-- @field #string OTHER_UNKNOWN Anything that does not fall into any other category.
+GROUP.Attribute = {
+  AIR_TRANSPORTPLANE="Air_TransportPlane",
+  AIR_AWACS="Air_AWACS",
+  AIR_FIGHTER="Air_Fighter",
+  AIR_BOMBER="Air_Bomber",
+  AIR_TANKER="Air_Tanker",
+  AIR_TRANSPORTHELO="Air_TransportHelo",
+  AIR_ATTACKHELO="Air_AttackHelo",
+  AIR_UAV="Air_UAV",
+  AIR_OTHER="Air_OtherAir",
+  GROUND_APC="Ground_APC",
+  GROUND_TRUCK="Ground_Truck",
+  GROUND_INFANTRY="Ground_Infantry",
+  GROUND_ARTILLERY="Ground_Artillery",
+  GROUND_TANK="Ground_Tank",
+  GROUND_TRAIN="Ground_Train",
+  GROUND_EWR="Ground_EWR",
+  GROUND_AAA="Ground_AAA",
+  GROUND_SAM="Ground_SAM",
+  GROUND_OTHER="Ground_OtherGround",
+  NAVAL_AIRCRAFTCARRIER="Naval_AircraftCarrier",
+  NAVAL_WARSHIP="Naval_WarShip",
+  NAVAL_ARMEDSHIP="Naval_ArmedShip",
+  NAVAL_UNARMEDSHIP="Naval_UnarmedShip",
+  NAVAL_OTHER="Naval_OtherNaval",
+  OTHER_UNKNOWN="Other_Unknown",
+}
+
+
 --- Create a new GROUP from a given GroupTemplate as a parameter.
 -- Note that the GroupTemplate is NOT spawned into the mission.
 -- It is merely added to the @{Core.Database}.
@@ -349,7 +405,8 @@ function GROUP:Destroy( GenerateEvent, delay )
   self:F2( self.GroupName )
 
   if delay and delay>0 then
-    SCHEDULER:New(nil, GROUP.Destroy, {self, GenerateEvent}, delay)
+    --SCHEDULER:New(nil, GROUP.Destroy, {self, GenerateEvent}, delay)
+    self:ScheduleOnce(delay, GROUP.Destroy, self, GenerateEvent)
   else
 
     local DCSGroup = self:GetDCSObject()
@@ -604,7 +661,7 @@ function GROUP:GetUnit( UnitNumber )
 
   if DCSGroup then
     local DCSUnit = DCSGroup:getUnit( UnitNumber )
-    local UnitFound = UNIT:Find( DCSUnit )
+    local UnitFound = UNIT:Find( DCSGroup:getUnit( UnitNumber ) )
     self:T2( UnitFound )
     return UnitFound
   end
@@ -655,7 +712,7 @@ end
 
 --- Count number of alive units in the group.
 -- @param #GROUP self
--- @return #number Number of alive units
+-- @return #number Number of alive units. If DCS group is nil, 0 is returned.
 function GROUP:CountAliveUnits()
   self:F3( { self.GroupName } )
   local DCSGroup = self:GetDCSObject()
@@ -672,7 +729,7 @@ function GROUP:CountAliveUnits()
     return n
   end
 
-  return nil
+  return 0
 end
 
 --- Get the first unit of the group which is alive.
@@ -809,7 +866,7 @@ end
 function GROUP:Activate()
   self:F2( { self.GroupName } )
   trigger.action.activateGroup( self:GetDCSObject() )
-  return self:GetDCSObject()
+  return self
 end
 
 
@@ -1042,6 +1099,45 @@ end
 -- @return #nil The GROUP is not existing or alive.
 function GROUP:GetFuel()
   return self:GetFuelAvg()
+end
+
+
+--- Get the number of shells, rockets, bombs and missiles the whole group currently has.
+-- @param #GROUP self
+-- @return #number Total amount of ammo the group has left. This is the sum of shells, rockets, bombs and missiles of all units.
+-- @return #number Number of shells left.
+-- @return #number Number of rockets left.
+-- @return #number Number of bombs left.
+-- @return #number Number of missiles left. 
+function GROUP:GetAmmunition()
+  self:F( self.ControllableName )
+
+  local DCSControllable = self:GetDCSObject()
+  
+  local Ntot=0
+  local Nshells=0
+  local Nrockets=0
+  local Nmissiles=0
+  
+  if DCSControllable then
+    
+    -- Loop over units.
+    for UnitID, UnitData in pairs( self:GetUnits() ) do
+      local Unit = UnitData -- Wrapper.Unit#UNIT
+      
+      -- Get ammo of the unit
+      local ntot, nshells, nrockets, nmissiles = Unit:GetAmmunition()
+      
+      Ntot=Ntot+ntot
+      Nshells=Nshells+nshells
+      Nrockets=Nrockets+nrockets
+      Nmissiles=Nmissiles+nmissiles 
+      
+    end
+    
+  end
+  
+  return Ntot, Nshells, Nrockets, Nmissiles
 end
 
 
@@ -1638,8 +1734,8 @@ function GROUP:Respawn( Template, Reset )
         self:F(GroupUnit:GetName())
 
         if GroupUnit:IsAlive() then
-          self:F("Alive")
-
+          self:I("FF Alive")
+          
           -- Get unit position vector.
           local GroupUnitVec3 = GroupUnit:GetVec3()
 
@@ -1681,9 +1777,9 @@ function GROUP:Respawn( Template, Reset )
           self:F( { UnitID, Template.units[UnitID], Template.units[UnitID] } )
         end
       end
-
-    else  -- Reset=false or nil
-
+      
+    elseif Reset==false then  -- Reset=false or nil
+    
       -- Loop over template units.
       for UnitID, TemplateUnitData in pairs( Template.units ) do
 
@@ -1723,9 +1819,32 @@ function GROUP:Respawn( Template, Reset )
         -- Debug.
         self:F( { UnitID, Template.units[UnitID], Template.units[UnitID] } )
       end
-
+      
+    else
+    
+      local units=self:GetUnits()
+    
+      -- Loop over template units.
+      for UnitID, Unit in pairs(Template.units) do
+      
+        for _,_unit in pairs(units) do
+          local unit=_unit --Wrapper.Unit#UNIT
+          
+          if unit:GetName()==Unit.name then
+            local coord=unit:GetCoordinate()
+            local heading=unit:GetHeading()
+            Unit.x=coord.x
+            Unit.y=coord.z
+            Unit.alt=coord.y
+            Unit.heading=math.rad(heading)
+            Unit.psi=-Unit.heading
+          end
+        end
+      
+      end
+      
     end
-
+    
   end
 
   -- Set tail number.
@@ -1755,8 +1874,8 @@ function GROUP:Respawn( Template, Reset )
   _DATABASE:Spawn(Template)
 
   -- Reset events.
-  self:EventRemoveAll()
-
+  self:ResetEvents()
+  
   return self
 end
 
@@ -1772,110 +1891,115 @@ end
 function GROUP:RespawnAtCurrentAirbase(SpawnTemplate, Takeoff, Uncontrolled) -- R2.4
   self:F2( { SpawnTemplate, Takeoff, Uncontrolled} )
 
-  -- Get closest airbase. Should be the one we are currently on.
-  local airbase=self:GetCoordinate():GetClosestAirbase()
+  if self and self:IsAlive() then
 
-  if airbase then
-    self:F2("Closest airbase = "..airbase:GetName())
+    -- Get closest airbase. Should be the one we are currently on.
+    local airbase=self:GetCoordinate():GetClosestAirbase()
+    
+    if airbase then
+      self:F2("Closest airbase = "..airbase:GetName())
+    else
+      self:E("ERROR: could not find closest airbase!")
+      return nil
+    end
+    -- Takeoff type. Default hot.
+    Takeoff = Takeoff or SPAWN.Takeoff.Hot
+    
+    -- Coordinate of the airbase.
+    local AirbaseCoord=airbase:GetCoordinate()
+    
+    -- Spawn template.  
+    SpawnTemplate = SpawnTemplate or self:GetTemplate()
+  
+    if SpawnTemplate then
+  
+      local SpawnPoint = SpawnTemplate.route.points[1]
+  
+      -- These are only for ships.
+      SpawnPoint.linkUnit = nil
+      SpawnPoint.helipadId = nil
+      SpawnPoint.airdromeId = nil
+  
+      -- Aibase id and category.
+      local AirbaseID       = airbase:GetID()
+      local AirbaseCategory = airbase:GetAirbaseCategory()
+      
+      if AirbaseCategory == Airbase.Category.SHIP or AirbaseCategory == Airbase.Category.HELIPAD then
+        SpawnPoint.linkUnit  = AirbaseID
+        SpawnPoint.helipadId = AirbaseID
+      elseif AirbaseCategory == Airbase.Category.AIRDROME then
+        SpawnPoint.airdromeId = AirbaseID
+      end
+  
+      
+      SpawnPoint.type   = GROUPTEMPLATE.Takeoff[Takeoff][1] -- type
+      SpawnPoint.action = GROUPTEMPLATE.Takeoff[Takeoff][2] -- action
+      
+      -- Get the units of the group.
+      local units=self:GetUnits()
+  
+      local x
+      local y
+      for UnitID=1,#units do
+          
+        local unit=units[UnitID] --Wrapper.Unit#UNIT
+  
+        -- Get closest parking spot of current unit. Note that we look for occupied spots since the unit is currently sitting on it!
+        local Parkingspot, TermialID, Distance=unit:GetCoordinate():GetClosestParkingSpot(airbase)
+        
+        --Parkingspot:MarkToAll("parking spot")
+        self:T2(string.format("Closest parking spot distance = %s, terminal ID=%s", tostring(Distance), tostring(TermialID)))
+  
+        -- Get unit coordinates for respawning position.
+        local uc=unit:GetCoordinate()
+        --uc:MarkToAll(string.format("re-spawnplace %s terminal %d", unit:GetName(), TermialID))
+        
+        SpawnTemplate.units[UnitID].x   = uc.x --Parkingspot.x
+        SpawnTemplate.units[UnitID].y   = uc.z --Parkingspot.z
+        SpawnTemplate.units[UnitID].alt = uc.y --Parkingspot.y
+  
+        SpawnTemplate.units[UnitID].parking    = TermialID
+        SpawnTemplate.units[UnitID].parking_id = nil
+        
+        --SpawnTemplate.units[UnitID].unitId=nil
+      end
+      
+      --SpawnTemplate.groupId=nil
+      
+      SpawnPoint.x   = SpawnTemplate.units[1].x   --x --AirbaseCoord.x
+      SpawnPoint.y   = SpawnTemplate.units[1].y   --y --AirbaseCoord.z
+      SpawnPoint.alt = SpawnTemplate.units[1].alt --AirbaseCoord:GetLandHeight()
+                 
+      SpawnTemplate.x = SpawnTemplate.units[1].x  --x --AirbaseCoord.x
+      SpawnTemplate.y = SpawnTemplate.units[1].y  --y --AirbaseCoord.z
+      
+      -- Set uncontrolled state.
+      SpawnTemplate.uncontrolled=Uncontrolled
+      
+      -- Set radio frequency and modulation.
+      if self.InitRespawnRadio then
+        SpawnTemplate.communication=self.InitRespawnRadio
+      end
+      if self.InitRespawnFreq then
+        SpawnTemplate.frequency=self.InitRespawnFreq
+      end
+      if self.InitRespawnModu then
+        SpawnTemplate.modulation=self.InitRespawnModu
+      end
+  
+      -- Destroy old group.
+      self:Destroy(false)
+      
+      -- Spawn new group.
+      _DATABASE:Spawn(SpawnTemplate)
+    
+      -- Reset events.
+      self:ResetEvents()
+  
+      return self
+    end
   else
-    self:E("ERROR: could not find closest airbase!")
-    return nil
-  end
-  -- Takeoff type. Default hot.
-  Takeoff = Takeoff or SPAWN.Takeoff.Hot
-
-  -- Coordinate of the airbase.
-  local AirbaseCoord=airbase:GetCoordinate()
-
-  -- Spawn template.
-  SpawnTemplate = SpawnTemplate or self:GetTemplate()
-
-  if SpawnTemplate then
-
-    local SpawnPoint = SpawnTemplate.route.points[1]
-
-    -- These are only for ships.
-    SpawnPoint.linkUnit = nil
-    SpawnPoint.helipadId = nil
-    SpawnPoint.airdromeId = nil
-
-    -- Aibase id and category.
-    local AirbaseID       = airbase:GetID()
-    local AirbaseCategory = airbase:GetDesc().category
-
-    if AirbaseCategory == Airbase.Category.SHIP or AirbaseCategory == Airbase.Category.HELIPAD then
-      SpawnPoint.linkUnit  = AirbaseID
-      SpawnPoint.helipadId = AirbaseID
-    elseif AirbaseCategory == Airbase.Category.AIRDROME then
-      SpawnPoint.airdromeId = AirbaseID
-    end
-
-
-    SpawnPoint.type   = GROUPTEMPLATE.Takeoff[Takeoff][1] -- type
-    SpawnPoint.action = GROUPTEMPLATE.Takeoff[Takeoff][2] -- action
-
-    -- Get the units of the group.
-    local units=self:GetUnits()
-
-    local x
-    local y
-    for UnitID=1,#units do
-
-      local unit=units[UnitID] --Wrapper.Unit#UNIT
-
-      -- Get closest parking spot of current unit. Note that we look for occupied spots since the unit is currently sitting on it!
-      local Parkingspot, TermialID, Distance=unit:GetCoordinate():GetClosestParkingSpot(airbase)
-
-      --Parkingspot:MarkToAll("parking spot")
-      self:T2(string.format("Closest parking spot distance = %s, terminal ID=%s", tostring(Distance), tostring(TermialID)))
-
-      -- Get unit coordinates for respawning position.
-      local uc=unit:GetCoordinate()
-      --uc:MarkToAll(string.format("re-spawnplace %s terminal %d", unit:GetName(), TermialID))
-
-      SpawnTemplate.units[UnitID].x   = uc.x --Parkingspot.x
-      SpawnTemplate.units[UnitID].y   = uc.z --Parkingspot.z
-      SpawnTemplate.units[UnitID].alt = uc.y --Parkingspot.y
-
-      SpawnTemplate.units[UnitID].parking    = TermialID
-      SpawnTemplate.units[UnitID].parking_id = nil
-
-      --SpawnTemplate.units[UnitID].unitId=nil
-    end
-
-    --SpawnTemplate.groupId=nil
-
-    SpawnPoint.x   = SpawnTemplate.units[1].x   --x --AirbaseCoord.x
-    SpawnPoint.y   = SpawnTemplate.units[1].y   --y --AirbaseCoord.z
-    SpawnPoint.alt = SpawnTemplate.units[1].alt --AirbaseCoord:GetLandHeight()
-
-    SpawnTemplate.x = SpawnTemplate.units[1].x  --x --AirbaseCoord.x
-    SpawnTemplate.y = SpawnTemplate.units[1].y  --y --AirbaseCoord.z
-
-    -- Set uncontrolled state.
-    SpawnTemplate.uncontrolled=Uncontrolled
-
-    -- Set radio frequency and modulation.
-    if self.InitRespawnRadio then
-      SpawnTemplate.communication=self.InitRespawnRadio
-    end
-    if self.InitRespawnFreq then
-      SpawnTemplate.frequency=self.InitRespawnFreq
-    end
-    if self.InitRespawnModu then
-      SpawnTemplate.modulation=self.InitRespawnModu
-    end
-
-    -- Destroy old group.
-    self:Destroy(false)
-
-    -- Spawn new group.
-    _DATABASE:Spawn(SpawnTemplate)
-
-    -- Reset events.
-    self:EventRemoveAll()
-
-    return self
+    self:E("WARNING: GROUP is not alive!")
   end
 
   return nil
@@ -2046,6 +2170,117 @@ function GROUP:GetDCSDesc(n)
   return nil
 end
 
+
+--- Get the generalized attribute of a self.
+-- Note that for a heterogenious self, the attribute is determined from the attribute of the first unit!
+-- @param #GROUP self
+-- @return #string Generalized attribute of the self.
+function GROUP:GetAttribute()
+
+  -- Default
+  local attribute=GROUP.Attribute.OTHER_UNKNOWN --#GROUP.Attribute
+
+  if self then
+
+    -----------
+    --- Air ---
+    -----------
+    -- Planes
+    local transportplane=self:HasAttribute("Transports") and self:HasAttribute("Planes")
+    local awacs=self:HasAttribute("AWACS")
+    local fighter=self:HasAttribute("Fighters") or self:HasAttribute("Interceptors") or self:HasAttribute("Multirole fighters") or (self:HasAttribute("Bombers") and not self:HasAttribute("Strategic bombers"))
+    local bomber=self:HasAttribute("Strategic bombers")
+    local tanker=self:HasAttribute("Tankers")
+    local uav=self:HasAttribute("UAVs")
+    -- Helicopters
+    local transporthelo=self:HasAttribute("Transport helicopters")
+    local attackhelicopter=self:HasAttribute("Attack helicopters")
+
+    --------------
+    --- Ground ---
+    --------------
+    -- Ground
+    local apc=self:HasAttribute("Infantry carriers")
+    local truck=self:HasAttribute("Trucks") and self:GetCategory()==Group.Category.GROUND
+    local infantry=self:HasAttribute("Infantry")
+    local artillery=self:HasAttribute("Artillery")
+    local tank=self:HasAttribute("Old Tanks") or self:HasAttribute("Modern Tanks")
+    local aaa=self:HasAttribute("AAA")
+    local ewr=self:HasAttribute("EWR")
+    local sam=self:HasAttribute("SAM elements") and (not self:HasAttribute("AAA"))
+    -- Train
+    local train=self:GetCategory()==Group.Category.TRAIN
+
+    -------------
+    --- Naval ---
+    -------------
+    -- Ships
+    local aircraftcarrier=self:HasAttribute("Aircraft Carriers")
+    local warship=self:HasAttribute("Heavy armed ships")
+    local armedship=self:HasAttribute("Armed ships")
+    local unarmedship=self:HasAttribute("Unarmed ships")
+
+
+    -- Define attribute. Order is important.
+    if transportplane then
+      attribute=GROUP.Attribute.AIR_TRANSPORTPLANE
+    elseif awacs then
+      attribute=GROUP.Attribute.AIR_AWACS
+    elseif fighter then
+      attribute=GROUP.Attribute.AIR_FIGHTER
+    elseif bomber then
+      attribute=GROUP.Attribute.AIR_BOMBER
+    elseif tanker then
+      attribute=GROUP.Attribute.AIR_TANKER
+    elseif transporthelo then
+      attribute=GROUP.Attribute.AIR_TRANSPORTHELO
+    elseif attackhelicopter then
+      attribute=GROUP.Attribute.AIR_ATTACKHELO
+    elseif uav then
+      attribute=GROUP.Attribute.AIR_UAV
+    elseif apc then
+      attribute=GROUP.Attribute.GROUND_APC
+    elseif infantry then
+      attribute=GROUP.Attribute.GROUND_INFANTRY
+    elseif artillery then
+      attribute=GROUP.Attribute.GROUND_ARTILLERY
+    elseif tank then
+      attribute=GROUP.Attribute.GROUND_TANK
+    elseif aaa then
+      attribute=GROUP.Attribute.GROUND_AAA
+    elseif ewr then
+      attribute=GROUP.Attribute.GROUND_EWR
+    elseif sam then
+      attribute=GROUP.Attribute.GROUND_SAM
+    elseif truck then
+      attribute=GROUP.Attribute.GROUND_TRUCK
+    elseif train then
+      attribute=GROUP.Attribute.GROUND_TRAIN
+    elseif aircraftcarrier then
+      attribute=GROUP.Attribute.NAVAL_AIRCRAFTCARRIER
+    elseif warship then
+      attribute=GROUP.Attribute.NAVAL_WARSHIP
+    elseif armedship then
+      attribute=GROUP.Attribute.NAVAL_ARMEDSHIP
+    elseif unarmedship then
+      attribute=GROUP.Attribute.NAVAL_UNARMEDSHIP
+    else
+      if self:IsGround() then
+        attribute=GROUP.Attribute.GROUND_OTHER
+      elseif self:IsShip() then
+        attribute=GROUP.Attribute.NAVAL_OTHER
+      elseif self:IsAir() then
+        attribute=GROUP.Attribute.AIR_OTHER
+      else
+        attribute=GROUP.Attribute.OTHER_UNKNOWN
+      end
+    end
+  end
+
+  return attribute
+end
+
+
 do -- Route methods
 
   --- (AIR) Return the Group to an @{Wrapper.Airbase#AIRBASE}.
@@ -2147,15 +2382,12 @@ do -- Event Handling
   --- Reset the subscriptions.
   -- @param #GROUP self
   -- @return #GROUP
-  function GROUP:EventRemoveAll()
-
-    self:EventDispatcher():RemoveAll( self )
-
-    local units = self:GetUnits()
-    if units then
-      for UnitID, UnitData in pairs( units ) do
-        UnitData:EventRemoveAll()
-      end
+  function GROUP:ResetEvents()
+  
+    self:EventDispatcher():Reset( self )
+    
+    for UnitID, UnitData in pairs( self:GetUnits() ) do
+      UnitData:ResetEvents()
     end
 
     return self

@@ -56,7 +56,7 @@
 --- @type ZONE_BASE
 -- @field #string ZoneName Name of the zone.
 -- @field #number ZoneProbability A value between 0 and 1. 0 = 0% and 1 = 100% probability.
--- @extends Core.Base#BASE
+-- @extends Core.Fsm#FSM
 
 
 --- This class is an abstract BASE class for derived classes, and is not meant to be instantiated.
@@ -120,7 +120,7 @@ ZONE_BASE = {
 -- @param #string ZoneName Name of the zone.
 -- @return #ZONE_BASE self
 function ZONE_BASE:New( ZoneName )
-  local self = BASE:Inherit( self, BASE:New() )
+  local self = BASE:Inherit( self, FSM:New() )
   self:F( ZoneName )
 
   self.ZoneName = ZoneName
@@ -442,6 +442,33 @@ function ZONE_RADIUS:New( ZoneName, Vec2, Radius )
 	return self
 end
 
+--- Mark the zone with markers on the F10 map.
+-- @param #ZONE_RADIUS self
+-- @param #number Points (Optional) The amount of points in the circle. Default 360.
+-- @return #ZONE_RADIUS self
+function ZONE_RADIUS:MarkZone(Points)
+
+  local Point = {}
+  local Vec2 = self:GetVec2()
+
+  Points = Points and Points or 360
+
+  local Angle
+  local RadialBase = math.pi*2
+  
+  for Angle = 0, 360, (360 / Points ) do
+  
+    local Radial = Angle * RadialBase / 360
+    
+    Point.x = Vec2.x + math.cos( Radial ) * self:GetRadius()
+    Point.y = Vec2.y + math.sin( Radial ) * self:GetRadius()
+    
+    COORDINATE:NewFromVec2(Point):MarkToAll(self:GetName())
+
+  end
+  
+end
+
 --- Bounds the zone with tires.
 -- @param #ZONE_RADIUS self
 -- @param #number Points (optional) The amount of points in the circle. Default 360.
@@ -658,30 +685,48 @@ function ZONE_RADIUS:Scan( ObjectCategories, UnitCategories )
 
   local function EvaluateZone( ZoneObject )
     --if ZoneObject:isExist() then --FF: isExist always returns false for SCENERY objects since DCS 2.2 and still in DCS 2.5
-    if ZoneObject then  
+    if ZoneObject then 
+     
       local ObjectCategory = ZoneObject:getCategory()
-      if ( ObjectCategory == Object.Category.UNIT and ZoneObject:isExist() and ZoneObject:isActive() ) or 
-         (ObjectCategory == Object.Category.STATIC and ZoneObject:isExist()) then
+      
+      --local name=ZoneObject:getName()
+      --env.info(string.format("Zone object %s", tostring(name)))
+      --self:E(ZoneObject)
+      
+      if ( ObjectCategory == Object.Category.UNIT and ZoneObject:isExist() and ZoneObject:isActive() ) or (ObjectCategory == Object.Category.STATIC and ZoneObject:isExist()) then
+      
         local CoalitionDCSUnit = ZoneObject:getCoalition()
+        
         local Include = false
         if not UnitCategories then
+          -- Anythink found is included.
           Include = true
         else
+          -- Check if found object is in specified categories.
           local CategoryDCSUnit = ZoneObject:getDesc().category
+          
           for UnitCategoryID, UnitCategory in pairs( UnitCategories ) do
             if UnitCategory == CategoryDCSUnit then
               Include = true
               break
             end
           end
+          
         end
+        
         if Include then
+        
           local CoalitionDCSUnit = ZoneObject:getCoalition()
+          
+          -- This coalition is inside the zone.
           self.ScanData.Coalitions[CoalitionDCSUnit] = true
+          
           self.ScanData.Units[ZoneObject] = ZoneObject
+          
           self:F2( { Name = ZoneObject:getName(), Coalition = CoalitionDCSUnit } )
         end
       end
+      
       if ObjectCategory == Object.Category.SCENERY then
         local SceneryType = ZoneObject:getTypeName()
         local SceneryName = ZoneObject:getName()
@@ -689,21 +734,29 @@ function ZONE_RADIUS:Scan( ObjectCategories, UnitCategories )
         self.ScanData.Scenery[SceneryType][SceneryName] = SCENERY:Register( SceneryName, ZoneObject )
         self:F2( { SCENERY =  self.ScanData.Scenery[SceneryType][SceneryName] } )
       end
+      
     end
+    
     return true
   end
 
+  -- Search objects.
   world.searchObjects( ObjectCategories, SphereSearch, EvaluateZone )
   
 end
 
-
+--- Count the number of different coalitions inside the zone.
+-- @param #ZONE_RADIUS self
+-- @return #table Table of DCS units and DCS statics inside the zone.
 function ZONE_RADIUS:GetScannedUnits()
 
   return self.ScanData.Units
 end
 
 
+--- Get a set of scanned units.
+-- @param #ZONE_RADIUS self
+-- @return Core.Set#SET_UNIT Set of units and statics inside the zone.
 function ZONE_RADIUS:GetScannedSetUnit()
 
   local SetUnit = SET_UNIT:New()
@@ -729,6 +782,9 @@ function ZONE_RADIUS:GetScannedSetUnit()
 end
 
 
+--- Count the number of different coalitions inside the zone.
+-- @param #ZONE_RADIUS self
+-- @return #number Counted coalitions.
 function ZONE_RADIUS:CountScannedCoalitions()
 
   local Count = 0
@@ -736,14 +792,25 @@ function ZONE_RADIUS:CountScannedCoalitions()
   for CoalitionID, Coalition in pairs( self.ScanData.Coalitions ) do
     Count = Count + 1
   end
+  
   return Count
 end
 
+--- Check if a certain coalition is inside a scanned zone.
+-- @param #ZONE_RADIUS self
+-- @param #number Coalition The coalition id, e.g. coalition.side.BLUE.
+-- @return #boolean If true, the coalition is inside the zone.
+function ZONE_RADIUS:CheckScannedCoalition( Coalition )
+  if Coalition then
+    return self.ScanData.Coalitions[Coalition]
+  end
+  return nil
+end
 
 --- Get Coalitions of the units in the Zone, or Check if there are units of the given Coalition in the Zone.
--- Returns nil if there are none ot two Coalitions in the zone!
+-- Returns nil if there are none to two Coalitions in the zone!
 -- Returns one Coalition if there are only Units of one Coalition in the Zone.
--- Returns the Coalition for the given Coalition if there are units of the Coalition in the Zone
+-- Returns the Coalition for the given Coalition if there are units of the Coalition in the Zone.
 -- @param #ZONE_RADIUS self
 -- @return #table
 function ZONE_RADIUS:GetScannedCoalition( Coalition )
@@ -768,20 +835,27 @@ function ZONE_RADIUS:GetScannedCoalition( Coalition )
 end
 
 
+--- Get scanned scenery type
+-- @param #ZONE_RADIUS self
+-- @return #table Table of DCS scenery type objects.
 function ZONE_RADIUS:GetScannedSceneryType( SceneryType )
   return self.ScanData.Scenery[SceneryType]
 end
 
 
+--- Get scanned scenery table
+-- @param #ZONE_RADIUS self
+-- @return #table Table of DCS scenery objects.
 function ZONE_RADIUS:GetScannedScenery()
   return self.ScanData.Scenery
 end
 
 
 --- Is All in Zone of Coalition?
+-- Check if only the specifed coalition is inside the zone and noone else.
 -- @param #ZONE_RADIUS self
--- @param Coalition
--- @return #boolean
+-- @param #number Coalition Coalition ID of the coalition which is checked to be the only one in the zone.
+-- @return #boolean True, if **only** that coalition is inside the zone and no one else.
 -- @usage
 --    self.Zone:Scan()
 --    local IsGuarded = self.Zone:IsAllInZoneOfCoalition( self.Coalition )
@@ -793,11 +867,12 @@ end
 
 
 --- Is All in Zone of Other Coalition?
+-- Check if only one coalition is inside the zone and the specified coalition is not the one.
 -- You first need to use the @{#ZONE_RADIUS.Scan} method to scan the zone before it can be evaluated!
 -- Note that once a zone has been scanned, multiple evaluations can be done on the scan result set.
 -- @param #ZONE_RADIUS self
--- @param Coalition
--- @return #boolean
+-- @param #number Coalition Coalition ID of the coalition which is not supposed to be in the zone.
+-- @return #boolean True, if and only if only one coalition is inside the zone and the specified coalition is not it.
 -- @usage
 --    self.Zone:Scan()
 --    local IsCaptured = self.Zone:IsAllInZoneOfOtherCoalition( self.Coalition )
@@ -809,11 +884,12 @@ end
 
 
 --- Is Some in Zone of Coalition?
+-- Check if more than one coaltion is inside the zone and the specifed coalition is one of them.
 -- You first need to use the @{#ZONE_RADIUS.Scan} method to scan the zone before it can be evaluated!
 -- Note that once a zone has been scanned, multiple evaluations can be done on the scan result set.
 -- @param #ZONE_RADIUS self
--- @param Coalition
--- @return #boolean
+-- @param #number Coalition ID of the coaliton which is checked to be inside the zone.
+-- @return #boolean True if more than one coalition is inside the zone and the specified coalition is one of them.
 -- @usage
 --    self.Zone:Scan()
 --    local IsAttacked = self.Zone:IsSomeInZoneOfCoalition( self.Coalition )
@@ -877,7 +953,6 @@ function ZONE_RADIUS:SearchZone( EvaluateFunction, ObjectCategories )
 
   local function EvaluateZone( ZoneDCSUnit )
   
-    env.info( ZoneDCSUnit:getName() ) 
   
     local ZoneUnit = UNIT:Find( ZoneDCSUnit )
 
@@ -1366,7 +1441,7 @@ end
 function ZONE_POLYGON_BASE:Flush()
   self:F2()
 
-  self:E( { Polygon = self.ZoneName, Coordinates = self._.Polygon } )
+  self:F( { Polygon = self.ZoneName, Coordinates = self._.Polygon } )
 
   return self
 end

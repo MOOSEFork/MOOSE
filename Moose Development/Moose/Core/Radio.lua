@@ -19,7 +19,7 @@
 --   * Your sound files need to be encoded in **.ogg** or .wav,
 --   * Your sound files should be **as tiny as possible**. It is suggested you encode in .ogg with low bitrate and sampling settings,
 --   * They need to be added in .\l10n\DEFAULT\ in you .miz file (wich can be decompressed like a .zip file),
---   * For simplicty sake, you can **let DCS' Mission Editor add the file** itself, by creating a new Trigger with the action "Sound to Country", and choosing your sound file and a country you don't use in your mission.
+--   * For simplicity sake, you can **let DCS' Mission Editor add the file** itself, by creating a new Trigger with the action "Sound to Country", and choosing your sound file and a country you don't use in your mission.
 --   
 -- Due to weird DCS quirks, **radio communications behave differently** if sent by a @{Wrapper.Unit#UNIT} or a @{Wrapper.Group#GROUP} or by any other @{Wrapper.Positionable#POSITIONABLE}
 -- 
@@ -28,7 +28,7 @@
 --   
 -- Note that obviously, the **frequency** and the **modulation** of the transmission are important only if the players are piloting an **Advanced System Modelling** enabled aircraft,
 -- like the A10C or the Mirage 2000C. They will **hear the transmission** if they are tuned on the **right frequency and modulation** (and if they are close enough - more on that below).
--- If a FC3 airacraft is used, it will **hear every communication, whatever the frequency and the modulation** is set to. The same is true for TACAN beacons. If your aircaft isn't compatible,
+-- If an FC3 aircraft is used, it will **hear every communication, whatever the frequency and the modulation** is set to. The same is true for TACAN beacons. If your aircraft isn't compatible,
 -- you won't hear/be able to use the TACAN beacon informations.
 --
 -- ===
@@ -39,7 +39,7 @@
 -- @image Core_Radio.JPG
 
 
---- Models the radio capabilty.
+--- Models the radio capability.
 -- 
 -- ## RADIO usage
 -- 
@@ -56,12 +56,12 @@
 --   * @{#RADIO.SetModulation}() : Sets the modulation of your transmission.
 --   * @{#RADIO.SetLoop}() : Choose if you want the transmission to be looped. If you need your transmission to be looped, you might need a @{#BEACON} instead...
 -- 
--- Additional Methods to set relevant parameters if the transmiter is a @{Wrapper.Unit#UNIT} or a @{Wrapper.Group#GROUP}
+-- Additional Methods to set relevant parameters if the transmitter is a @{Wrapper.Unit#UNIT} or a @{Wrapper.Group#GROUP}
 -- 
 --   * @{#RADIO.SetSubtitle}() : Set both the subtitle and its duration,
 --   * @{#RADIO.NewUnitTransmission}() : Shortcut to set all the relevant parameters in one method call
 -- 
--- Additional Methods to set relevant parameters if the transmiter is any other @{Wrapper.Positionable#POSITIONABLE}
+-- Additional Methods to set relevant parameters if the transmitter is any other @{Wrapper.Positionable#POSITIONABLE}
 -- 
 --   * @{#RADIO.SetPower}() : Sets the power of the antenna in Watts
 --   * @{#RADIO.NewGenericTransmission}() : Shortcut to set all the relevant parameters in one method call
@@ -420,6 +420,7 @@ end
 BEACON = {
   ClassName = "BEACON",
   Positionable = nil,
+  name=nil,
 }
 
 --- Beacon types supported by DCS. 
@@ -496,6 +497,8 @@ function BEACON:New(Positionable)
   -- Set positionable.
   if Positionable:GetPointVec2() then -- It's stupid, but the only way I found to make sure positionable is valid
     self.Positionable = Positionable
+    self.name=Positionable:GetName()
+    self:I(string.format("New BEACON %s", tostring(self.name)))
     return self
   end
   
@@ -517,7 +520,7 @@ end
 -- local myUnit = UNIT:FindByName("MyUnit") 
 -- local myBeacon = myUnit:GetBeacon() -- Creates the beacon
 -- 
--- myBeacon:TACAN(20, "Y", "TEXACO", true) -- Activate the beacon
+-- myBeacon:ActivateTACAN(20, "Y", "TEXACO", true) -- Activate the beacon
 function BEACON:ActivateTACAN(Channel, Mode, Message, Bearing, Duration)
   self:T({channel=Channel, mode=Mode, callsign=Message, bearing=Bearing, duration=Duration})
   
@@ -550,7 +553,7 @@ function BEACON:ActivateTACAN(Channel, Mode, Message, Bearing, Duration)
   local UnitID=self.Positionable:GetID()
   
   -- Debug.
-  self:T({"TACAN BEACON started!"})
+  self:I({string.format("BEACON Activating TACAN %s: Channel=%d%s, Morse=%s, Bearing=%s, Duration=%s!", tostring(self.name), Channel, Mode, Message, tostring(Bearing), tostring(Duration))})
     
   -- Start beacon.
   self.Positionable:CommandActivateBeacon(Type, System, Frequency, UnitID, Channel, Mode, AA, Message, Bearing)
@@ -796,4 +799,5 @@ function BEACON:_TACANToFrequency(TACANChannel, TACANMode)
   
   return (A + TACANChannel - B) * 1000000
 end
+
 

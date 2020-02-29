@@ -1,4 +1,4 @@
---- **AI** -- Models the process of AI air operations.
+--- **AI** - Models the process of AI air operations.
 -- 
 -- ===
 -- 
@@ -308,7 +308,7 @@ end
 -- @param DCS#Speed  RTBMaxSpeed The maximum speed of the @{Wrapper.Controllable} in km/h.
 -- @return #AI_AIR self
 function AI_AIR:SetRTBSpeed( RTBMinSpeed, RTBMaxSpeed )
-  self:F2( { RTBMinSpeed, RTBMaxSpeed } )
+  self:F( { RTBMinSpeed, RTBMaxSpeed } )
   
   self.RTBMinSpeed = RTBMinSpeed
   self.RTBMaxSpeed = RTBMaxSpeed
@@ -425,7 +425,18 @@ function AI_AIR:onafterStart( Controllable, From, Event, To )
   Controllable:OptionROTVertical()
 end
 
+--- Coordinates the approriate returning action.
+-- @param #AI_AIR self
+-- @return #AI_AIR self
+-- @param Wrapper.Controllable#CONTROLLABLE Controllable The Controllable Object managed by the FSM.
+-- @param #string From The From State string.
+-- @param #string Event The Event string.
+-- @param #string To The To State string.
+function AI_AIR:onafterReturn( Controllable, From, Event, To )
 
+  self:__RTB( self.TaskDelay )
+  
+end
 
 --- @param #AI_AIR self
 function AI_AIR:onbeforeStatus()
@@ -446,7 +457,7 @@ function AI_AIR:onafterStatus()
       local DistanceFromHomeBase = self.HomeAirbase:GetCoordinate():Get2DDistance( self.Controllable:GetCoordinate() )
       
       if DistanceFromHomeBase > self.DisengageRadius then
-        self:E( self.Controllable:GetName() .. " is too far from home base, RTB!" )
+        self:I( self.Controllable:GetName() .. " is too far from home base, RTB!" )
         self:Hold( 300 )
         RTB = false
       end
@@ -461,7 +472,7 @@ function AI_AIR:onafterStatus()
 --    end
     
 
-    if not self:Is( "Fuel" ) and not self:Is( "Home" ) then
+    if not self:Is( "Fuel" ) and not self:Is( "Home" ) and not self:is( "Refuelling" )then
       
       local Fuel = self.Controllable:GetFuelMin()
       
@@ -470,10 +481,10 @@ function AI_AIR:onafterStatus()
       if Fuel < self.FuelThresholdPercentage then
       
         if self.TankerName then
-          self:E( self.Controllable:GetName() .. " is out of fuel: " .. Fuel .. " ... Refuelling at Tanker!" )
+          self:I( self.Controllable:GetName() .. " is out of fuel: " .. Fuel .. " ... Refuelling at Tanker!" )
           self:Refuel()
         else
-          self:E( self.Controllable:GetName() .. " is out of fuel: " .. Fuel .. " ... RTB!" )
+          self:I( self.Controllable:GetName() .. " is out of fuel: " .. Fuel .. " ... RTB!" )
           local OldAIControllable = self.Controllable
           
           local OrbitTask = OldAIControllable:TaskOrbitCircle( math.random( self.PatrolFloorAltitude, self.PatrolCeilingAltitude ), self.PatrolMinSpeed )
@@ -481,10 +492,13 @@ function AI_AIR:onafterStatus()
           OldAIControllable:SetTask( TimedOrbitTask, 10 )
     
           self:Fuel()
-          RTB = true
         end
       else
       end
+    end
+
+    if self:Is( "Fuel" ) and not self:Is( "Home" ) and not self:is( "Refuelling" ) then
+      RTB = true
     end
     
     -- TODO: Check GROUP damage function.
@@ -495,7 +509,7 @@ function AI_AIR:onafterStatus()
     -- Note that a group can consist of more units, so if one unit is damaged of a group, the mission may continue.
     -- The damaged unit will RTB due to DCS logic, and the others will continue to engage.
     if ( Damage / InitialLife ) < self.PatrolDamageThreshold then
-      self:E( self.Controllable:GetName() .. " is damaged: " .. Damage .. " ... RTB!" )
+      self:I( self.Controllable:GetName() .. " is damaged: " .. Damage .. " ... RTB!" )
       self:Damaged()
       RTB = true
       self:SetStatusOff()
@@ -513,7 +527,7 @@ function AI_AIR:onafterStatus()
           if Damage ~= InitialLife then
             self:Damaged()
           else  
-            self:E( self.Controllable:GetName() .. " control lost! " )
+            self:I( self.Controllable:GetName() .. " control lost! " )
             
             self:LostControl()
           end
@@ -570,7 +584,7 @@ function AI_AIR:onafterRTB( AIGroup, From, Event, To )
   
   if AIGroup and AIGroup:IsAlive() then
 
-    self:E( "Group " .. AIGroup:GetName() .. " ... RTB! ( " .. self:GetState() .. " )" )
+    self:I( "Group " .. AIGroup:GetName() .. " ... RTB! ( " .. self:GetState() .. " )" )
     
     self:ClearTargetDistance()
     --AIGroup:ClearTasks()
@@ -581,24 +595,37 @@ function AI_AIR:onafterRTB( AIGroup, From, Event, To )
     
     local FromCoord = AIGroup:GetCoordinate()
     local ToTargetCoord = self.HomeAirbase:GetCoordinate()
-    local ToTargetSpeed = math.random( self.RTBMinSpeed, self.RTBMaxSpeed )
+
+    if not self.RTBMinSpeed and not self.RTBMaxSpeed then    
+      local RTBSpeedMax = AIGroup:GetSpeedMax()
+      self:SetRTBSpeed( RTBSpeedMax * 0.25, RTBSpeedMax * 0.25 )  
+    end
+    
+    local RTBSpeed = math.random( self.RTBMinSpeed, self.RTBMaxSpeed )
     local ToAirbaseAngle = FromCoord:GetAngleDegrees( FromCoord:GetDirectionVec3( ToTargetCoord ) )
 
     local Distance = FromCoord:Get2DDistance( ToTargetCoord )
     
     local ToAirbaseCoord = FromCoord:Translate( 5000, ToAirbaseAngle )
     if Distance < 5000 then
-      self:E( "RTB and near the airbase!" )
+      self:I( "RTB and near the airbase!" )
       self:Home()
       return
     end
+    
+    if not AIGroup:InAir() == true then
+      self:I( "Not anymore in the air, considered Home." )
+      self:Home()
+      return
+    end
+      
     
     --- Create a route point of type air.
     local FromRTBRoutePoint = FromCoord:WaypointAir( 
       self.PatrolAltType, 
       POINT_VEC3.RoutePointType.TurningPoint, 
       POINT_VEC3.RoutePointAction.TurningPoint, 
-      ToTargetSpeed, 
+      RTBSpeed, 
       true 
     )
 
@@ -607,7 +634,7 @@ function AI_AIR:onafterRTB( AIGroup, From, Event, To )
       self.PatrolAltType, 
       POINT_VEC3.RoutePointType.TurningPoint, 
       POINT_VEC3.RoutePointAction.TurningPoint, 
-      ToTargetSpeed, 
+      RTBSpeed, 
       true 
     )
 
@@ -634,7 +661,7 @@ end
 function AI_AIR:onafterHome( AIGroup, From, Event, To )
   self:F( { AIGroup, From, Event, To } )
 
-  self:E( "Group " .. self.Controllable:GetName() .. " ... Home! ( " .. self:GetState() .. " )" )
+  self:I( "Group " .. self.Controllable:GetName() .. " ... Home! ( " .. self:GetState() .. " )" )
   
   if AIGroup and AIGroup:IsAlive() then
   end
@@ -648,7 +675,7 @@ end
 function AI_AIR:onafterHold( AIGroup, From, Event, To, HoldTime )
   self:F( { AIGroup, From, Event, To } )
 
-  self:E( "Group " .. self.Controllable:GetName() .. " ... Holding! ( " .. self:GetState() .. " )" )
+  self:I( "Group " .. self.Controllable:GetName() .. " ... Holding! ( " .. self:GetState() .. " )" )
   
   if AIGroup and AIGroup:IsAlive() then
     local OrbitTask = AIGroup:TaskOrbitCircle( math.random( self.PatrolFloorAltitude, self.PatrolCeilingAltitude ), self.PatrolMinSpeed )
@@ -680,11 +707,14 @@ end
 function AI_AIR:onafterRefuel( AIGroup, From, Event, To )
   self:F( { AIGroup, From, Event, To } )
 
-  self:E( "Group " .. self.Controllable:GetName() .. " ... Refuelling! ( " .. self:GetState() .. " )" )
-  
   if AIGroup and AIGroup:IsAlive() then
+  
+    -- Get tanker group.
     local Tanker = GROUP:FindByName( self.TankerName )
-    if Tanker:IsAlive() and Tanker:IsAirPlane() then
+
+    if Tanker and Tanker:IsAlive() and Tanker:IsAirPlane() then
+
+      self:I( "Group " .. self.Controllable:GetName() .. " ... Refuelling! State=" .. self:GetState() .. ", Refuelling tanker " .. self.TankerName )
 
       local RefuelRoute = {}
   
@@ -695,22 +725,10 @@ function AI_AIR:onafterRefuel( AIGroup, From, Event, To )
       local ToRefuelSpeed = math.random( self.PatrolMinSpeed, self.PatrolMaxSpeed )
       
       --- Create a route point of type air.
-      local FromRefuelRoutePoint = FromRefuelCoord:WaypointAir( 
-        self.PatrolAltType, 
-        POINT_VEC3.RoutePointType.TurningPoint, 
-        POINT_VEC3.RoutePointAction.TurningPoint, 
-        ToRefuelSpeed, 
-        true 
-      )
+      local FromRefuelRoutePoint = FromRefuelCoord:WaypointAir(self.PatrolAltType, POINT_VEC3.RoutePointType.TurningPoint, POINT_VEC3.RoutePointAction.TurningPoint, ToRefuelSpeed, true)
 
-      --- Create a route point of type air.
-      local ToRefuelRoutePoint = ToRefuelCoord:WaypointAir( 
-        self.PatrolAltType, 
-        POINT_VEC3.RoutePointType.TurningPoint, 
-        POINT_VEC3.RoutePointAction.TurningPoint, 
-        ToRefuelSpeed, 
-        true 
-      )
+      --- Create a route point of type air. NOT used!
+      local ToRefuelRoutePoint = Tanker:GetCoordinate():WaypointAir(self.PatrolAltType, POINT_VEC3.RoutePointType.TurningPoint, POINT_VEC3.RoutePointAction.TurningPoint, ToRefuelSpeed, true)
   
       self:F( { ToRefuelSpeed = ToRefuelSpeed } )
       
@@ -719,16 +737,31 @@ function AI_AIR:onafterRefuel( AIGroup, From, Event, To )
       
       AIGroup:OptionROEHoldFire()
       AIGroup:OptionROTEvadeFire()
+      
+      -- Get Class name for .Resume function
+      local classname=self:GetClassName()
+      
+      -- AI_A2A_CAP can call this function but does not have a .Resume function. Try to fix.
+      if classname=="AI_A2A_CAP" then
+        classname="AI_AIR_PATROL"
+      end
+      
+      env.info("FF refueling classname="..classname)
   
       local Tasks = {}
       Tasks[#Tasks+1] = AIGroup:TaskRefueling()
-      Tasks[#Tasks+1] = AIGroup:TaskFunction( self:GetClassName() .. ".Resume", self )
+      Tasks[#Tasks+1] = AIGroup:TaskFunction(  classname .. ".Resume", self )
       RefuelRoute[#RefuelRoute].task = AIGroup:TaskCombo( Tasks )
   
       AIGroup:Route( RefuelRoute, self.TaskDelay )
+      
     else
+    
+      -- No tanker defined ==> RTB!
       self:RTB()
+      
     end
+    
   end
 
 end

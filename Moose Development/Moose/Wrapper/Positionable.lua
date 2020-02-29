@@ -63,7 +63,7 @@ POSITIONABLE.__.Cargo = {}
 -- @param #string PositionableName The POSITIONABLE name
 -- @return #POSITIONABLE self
 function POSITIONABLE:New( PositionableName )
-  local self = BASE:Inherit( self, IDENTIFIABLE:New( PositionableName ) )
+  local self = BASE:Inherit( self, IDENTIFIABLE:New( PositionableName ) ) -- #POSITIONABLE
 
   self.PositionableName = PositionableName
   return self
@@ -655,6 +655,21 @@ function POSITIONABLE:GetVelocityVec3()
   return nil
 end
 
+--- Get relative velocity with respect to another POSITIONABLE.
+-- @param #POSITIONABLE self
+-- @param #POSITIONABLE positionable Other positionable.
+-- @return #number Relative velocity in m/s.
+function POSITIONABLE:GetRelativeVelocity(positionable)
+  self:F2( self.PositionableName )
+  
+  local v1=self:GetVelocityVec3()
+  local v2=positionable:GetVelocityVec3()
+  
+  local vtot=UTILS.VecAdd(v1,v2)
+  
+  return UTILS.VecNorm(vtot)
+end
+
 
 --- Returns the POSITIONABLE height in meters.
 -- @param Wrapper.Positionable#POSITIONABLE self
@@ -1148,9 +1163,9 @@ end
 
 --- Start Lasing a POSITIONABLE
 -- @param #POSITIONABLE self
--- @param #POSITIONABLE Target
--- @param #number LaserCode
--- @param #number Duration
+-- @param #POSITIONABLE Target The target to lase.
+-- @param #number LaserCode Laser code or random number in [1000, 9999].
+-- @param #number Duration Duration of lasing in seconds.
 -- @return Core.Spot#SPOT
 function POSITIONABLE:LaseUnit( Target, LaserCode, Duration ) --R2.1
   self:F2()
@@ -1167,6 +1182,24 @@ function POSITIONABLE:LaseUnit( Target, LaserCode, Duration ) --R2.1
   
   return self.Spot
   
+end
+
+--- Start Lasing a COORDINATE.
+-- @param #POSITIONABLE self
+-- @param Core.Point#COORDIUNATE Coordinate The coordinate where the lase is pointing at.
+-- @param #number LaserCode Laser code or random number in [1000, 9999].
+-- @param #number Duration Duration of lasing in seconds.
+-- @return Core.Spot#SPOT
+function POSITIONABLE:LaseCoordinate(Coordinate, LaserCode, Duration)
+  self:F2()
+
+  LaserCode = LaserCode or math.random(1000, 9999)
+  
+  self.Spot = SPOT:New(self) -- Core.Spot#SPOT
+  self.Spot:LaseOnCoordinate(Coordinate, LaserCode, Duration)
+  self.LaserCode = LaserCode
+  
+  return self.Spot
 end
 
 --- Stop Lasing a POSITIONABLE

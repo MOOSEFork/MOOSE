@@ -357,7 +357,7 @@ do -- COORDINATE
   -- @return #table Table of DCS static objects found.
   -- @return #table Table of DCS scenery objects found.
   function COORDINATE:ScanObjects(radius, scanunits, scanstatics, scanscenery)
-    self:F(string.format("Scanning in radius %.1f m.", radius))
+    self:F(string.format("Scanning in radius %.1f m.", radius or 100))
 
     local SphereSearch = {
       id = world.VolumeType.SPHERE,
@@ -437,9 +437,11 @@ do -- COORDINATE
     end
     for _,static in pairs(Statics) do
       self:T(string.format("Scan found static %s", static:getName()))
+      _DATABASE:AddStatic(static:getName())
     end
     for _,scenery in pairs(Scenery) do
-      self:T(string.format("Scan found scenery %s", scenery:getTypeName()))
+      self:T(string.format("Scan found scenery %s typename=%s", scenery:getName(), scenery:getTypeName()))
+      SCENERY:Register(scenery:getName(), scenery)
     end
     
     return gotunits, gotstatics, gotscenery, Units, Statics, Scenery
@@ -560,7 +562,7 @@ do -- COORDINATE
   
   --- Return the height of the land at the coordinate.
   -- @param #COORDINATE self
-  -- @return #number
+  -- @return #number Land height (ASL) in meters.
   function COORDINATE:GetLandHeight()
     local Vec2 = { x = self.x, y = self.z }
     return land.getHeight( Vec2 )
@@ -865,7 +867,7 @@ do -- COORDINATE
   -- @param #number Precision The precision.
   -- @param Core.Settings#SETTINGS Settings
   -- @return #string The bearing text in degrees.
-  function COORDINATE:GetBearingText( AngleRadians, Precision, Settings )
+  function COORDINATE:GetBearingText( AngleRadians, Precision, Settings, Language )
 
     local Settings = Settings or _SETTINGS -- Core.Settings#SETTINGS
 
@@ -881,16 +883,25 @@ do -- COORDINATE
   -- @param #number Distance The distance in meters.
   -- @param Core.Settings#SETTINGS Settings
   -- @return #string The distance text expressed in the units of measurement.
-  function COORDINATE:GetDistanceText( Distance, Settings )
+  function COORDINATE:GetDistanceText( Distance, Settings, Language )
 
     local Settings = Settings or _SETTINGS -- Core.Settings#SETTINGS
+    local Language = Language or "EN"
 
     local DistanceText
 
     if Settings:IsMetric() then
-      DistanceText = " for " .. UTILS.Round( Distance / 1000, 2 ) .. " km"
+      if     Language == "EN" then
+        DistanceText = " for " .. UTILS.Round( Distance / 1000, 2 ) .. " km"
+      elseif Language == "RU" then
+        DistanceText = " за " .. UTILS.Round( Distance / 1000, 2 ) .. " километров"
+      end
     else
-      DistanceText = " for " .. UTILS.Round( UTILS.MetersToNM( Distance ), 2 ) .. " miles"
+      if     Language == "EN" then
+        DistanceText = " for " .. UTILS.Round( UTILS.MetersToNM( Distance ), 2 ) .. " miles"
+      elseif Language == "RU" then
+        DistanceText = " за " .. UTILS.Round( UTILS.MetersToNM( Distance ), 2 ) .. " миль"
+      end
     end
     
     return DistanceText
@@ -899,14 +910,24 @@ do -- COORDINATE
   --- Return the altitude text of the COORDINATE.
   -- @param #COORDINATE self
   -- @return #string Altitude text.
-  function COORDINATE:GetAltitudeText( Settings )
+  function COORDINATE:GetAltitudeText( Settings, Language )
     local Altitude = self.y
     local Settings = Settings or _SETTINGS
+    local Language = Language or "EN"
+    
     if Altitude ~= 0 then
       if Settings:IsMetric() then
-        return " at " .. UTILS.Round( self.y, -3 ) .. " meters"
+        if     Language == "EN" then
+          return " at " .. UTILS.Round( self.y, -3 ) .. " meters"
+        elseif Language == "RU" then
+          return " в " .. UTILS.Round( self.y, -3 ) .. " метры"
+        end
       else
-        return " at " .. UTILS.Round( UTILS.MetersToFeet( self.y ), -3 ) .. " feet"
+        if     Language == "EN" then
+          return " at " .. UTILS.Round( UTILS.MetersToFeet( self.y ), -3 ) .. " feet"
+        elseif Language == "RU" then
+          return " в " .. UTILS.Round( self.y, -3 ) .. " ноги"
+        end
       end
     else
       return ""
@@ -952,12 +973,12 @@ do -- COORDINATE
   -- @param #number Distance The distance
   -- @param Core.Settings#SETTINGS Settings
   -- @return #string The BR Text
-  function COORDINATE:GetBRText( AngleRadians, Distance, Settings )
+  function COORDINATE:GetBRText( AngleRadians, Distance, Settings, Language )
 
     local Settings = Settings or _SETTINGS -- Core.Settings#SETTINGS
 
-    local BearingText = self:GetBearingText( AngleRadians, 0, Settings )
-    local DistanceText = self:GetDistanceText( Distance, Settings )
+    local BearingText = self:GetBearingText( AngleRadians, 0, Settings, Language )
+    local DistanceText = self:GetDistanceText( Distance, Settings, Language )
     
     local BRText = BearingText .. DistanceText
 
@@ -970,13 +991,13 @@ do -- COORDINATE
   -- @param #number Distance The distance
   -- @param Core.Settings#SETTINGS Settings
   -- @return #string The BRA Text
-  function COORDINATE:GetBRAText( AngleRadians, Distance, Settings )
+  function COORDINATE:GetBRAText( AngleRadians, Distance, Settings, Language )
 
     local Settings = Settings or _SETTINGS -- Core.Settings#SETTINGS
 
-    local BearingText = self:GetBearingText( AngleRadians, 0, Settings )
-    local DistanceText = self:GetDistanceText( Distance, Settings )
-    local AltitudeText = self:GetAltitudeText( Settings )
+    local BearingText = self:GetBearingText( AngleRadians, 0, Settings, Language )
+    local DistanceText = self:GetDistanceText( Distance, Settings, Language  )
+    local AltitudeText = self:GetAltitudeText( Settings, Language  )
 
     local BRAText = BearingText .. DistanceText .. AltitudeText -- When the POINT is a VEC2, there will be no altitude shown.
 
@@ -1055,17 +1076,15 @@ do -- COORDINATE
     -- Airbase parameters for takeoff and landing points.
     if airbase then
       local AirbaseID = airbase:GetID()
-      local AirbaseCategory = airbase:GetDesc().category
+      local AirbaseCategory = airbase:GetAirbaseCategory()
       if AirbaseCategory == Airbase.Category.SHIP or AirbaseCategory == Airbase.Category.HELIPAD then
         RoutePoint.linkUnit = AirbaseID
         RoutePoint.helipadId = AirbaseID
       elseif AirbaseCategory == Airbase.Category.AIRDROME then
         RoutePoint.airdromeId = AirbaseID
       else
-        self:T("ERROR: Unknown airbase category in COORDINATE:WaypointAir()!")
+        self:E("ERROR: Unknown airbase category in COORDINATE:WaypointAir()!")
       end
-      
-      --self:MarkToAll(string.format("Landing waypoint at airbase %s, ID=%d, Category=%d", airbase:GetName(), AirbaseID, AirbaseCategory  ))
     end
     
     -- Time in minutes to stay at the airbase before resuming route. 
@@ -1177,41 +1196,69 @@ do -- COORDINATE
   
   --- Build an ground type route point.
   -- @param #COORDINATE self
-  -- @param #number Speed (optional) Speed in km/h. The default speed is 20 km/h.
-  -- @param #string Formation (optional) The route point Formation, which is a text string that specifies exactly the Text in the Type of the route point, like "Vee", "Echelon Right".
+  -- @param #number Speed (Optional) Speed in km/h. The default speed is 20 km/h.
+  -- @param #string Formation (Optional) The route point Formation, which is a text string that specifies exactly the Text in the Type of the route point, like "Vee", "Echelon Right".
+  -- @param #table DCSTasks (Optional) A table of DCS tasks that are executed at the waypoints. Mind the curly brackets {}!
   -- @return #table The route point.
-  function COORDINATE:WaypointGround( Speed, Formation )
-    self:F2( { Formation, Speed } )
+  function COORDINATE:WaypointGround( Speed, Formation, DCSTasks )
+    self:F2( { Speed, Formation, DCSTasks } )
 
- 
     local RoutePoint = {}
-    RoutePoint.x = self.x
-    RoutePoint.y = self.z
-
-    RoutePoint.action = Formation or ""
-    --RoutePoint.formation_template = Formation and "" or nil
-
+    
+    RoutePoint.x    = self.x
+    RoutePoint.y    = self.z
+    
+    RoutePoint.alt  = self:GetLandHeight()+1 -- self.y
+    RoutePoint.alt_type = COORDINATE.WaypointAltType.BARO
+ 
+    RoutePoint.action = Formation or "Off Road"
+    RoutePoint.formation_template=""
+    
+    RoutePoint.ETA=0
+    RoutePoint.ETA_locked=true
 
     RoutePoint.speed = ( Speed or 20 ) / 3.6
     RoutePoint.speed_locked = true
 
-    --  ["task"] =
-    --  {
-    --      ["id"] = "ComboTask",
-    --      ["params"] =
-    --      {
-    --          ["tasks"] =
-    --          {
-    --          }, -- end of ["tasks"]
-    --      }, -- end of ["params"]
-    --  }, -- end of ["task"]
+    RoutePoint.task = {}
+    RoutePoint.task.id = "ComboTask"
+    RoutePoint.task.params = {}
+    RoutePoint.task.params.tasks = DCSTasks or {}
+    
+    return RoutePoint
+  end
+  
+  --- Build route waypoint point for Naval units.
+  -- @param #COORDINATE self
+  -- @param #number Speed (Optional) Speed in km/h. The default speed is 20 km/h.
+  -- @param #string Depth (Optional) Dive depth in meters. Only for submarines. Default is COORDINATE.y component.
+  -- @param #table DCSTasks (Optional) A table of DCS tasks that are executed at the waypoints. Mind the curly brackets {}!
+  -- @return #table The route point.
+  function COORDINATE:WaypointNaval( Speed, Depth, DCSTasks )
+    self:F2( { Speed, Depth, DCSTasks } )
 
+    local RoutePoint = {}
+    
+    RoutePoint.x    = self.x
+    RoutePoint.y    = self.z
+    
+    RoutePoint.alt  = Depth or self.y  -- Depth is for submarines only. Ships should have alt=0.
+    RoutePoint.alt_type = "BARO"
+
+    RoutePoint.type   = "Turning Point"
+    RoutePoint.action = "Turning Point"
+    RoutePoint.formation_template = ""
+
+    RoutePoint.ETA=0
+    RoutePoint.ETA_locked=true
+
+    RoutePoint.speed = ( Speed or 20 ) / 3.6
+    RoutePoint.speed_locked = true
 
     RoutePoint.task = {}
     RoutePoint.task.id = "ComboTask"
     RoutePoint.task.params = {}
-    RoutePoint.task.params.tasks = {}
-
+    RoutePoint.task.params.tasks = DCSTasks or {}
 
     return RoutePoint
   end
@@ -1232,17 +1279,23 @@ do -- COORDINATE
     -- Loop over all airbases.
     for _,_airbase in pairs(airbases) do
       local airbase=_airbase --Wrapper.Airbase#AIRBASE
-      local category=airbase:GetDesc().category
-      if Category and Category==category or Category==nil then
-        local dist=self:Get2DDistance(airbase:GetCoordinate())
-        if closest==nil then
-          distmin=dist
-          closest=airbase
-        else
-          if dist<distmin then
+      if airbase then
+        local category=airbase:GetAirbaseCategory()
+        if Category and Category==category or Category==nil then
+
+          -- Distance to airbase.         
+          local dist=self:Get2DDistance(airbase:GetCoordinate())
+          
+          if closest==nil then
             distmin=dist
             closest=airbase
-          end 
+          else
+            if dist<distmin then
+              distmin=dist
+              closest=airbase
+            end 
+          end
+          
         end
       end
     end
@@ -1258,6 +1311,7 @@ do -- COORDINATE
   -- @return Core.Point#COORDINATE Coordinate of the nearest parking spot.
   -- @return #number Terminal ID.
   -- @return #number Distance to closest parking spot in meters.
+  -- @return Wrapper.Airbase#AIRBASE#ParkingSpot Parking spot table.
   function COORDINATE:GetClosestParkingSpot(airbase, terminaltype, free)
     
     -- Get airbase table.
@@ -1272,6 +1326,7 @@ do -- COORDINATE
     local _closest=nil --Core.Point#COORDINATE
     local _termID=nil
     local _distmin=nil
+    local spot=nil --Wrapper.Airbase#AIRBASE.ParkingSpot
 
     -- Loop over all airbases.
     for _,_airbase in pairs(airbases) do
@@ -1291,11 +1346,13 @@ do -- COORDINATE
             _closest=_coord
             _distmin=_dist
             _termID=_spot.TerminalID
+            spot=_spot
           else    
             if _dist<_distmin then
               _distmin=_dist
               _closest=_coord
               _termID=_spot.TerminalID
+              spot=_spot
             end
           end
                           
@@ -1303,7 +1360,7 @@ do -- COORDINATE
       end
     end
    
-    return _closest, _termID, _distmin
+    return _closest, _termID, _distmin, spot
   end
 
   --- Gets the nearest free parking spot.
@@ -1800,7 +1857,7 @@ do -- COORDINATE
 
   --- Returns if a Coordinate is in a certain Radius of this Coordinate in 2D plane using the X and Z axis.
   -- @param #COORDINATE self
-  -- @param #COORDINATE ToCoordinate The coordinate that will be tested if it is in the radius of this coordinate.
+  -- @param #COORDINATE Coordinate The coordinate that will be tested if it is in the radius of this coordinate.
   -- @param #number Radius The radius of the circle on the 2D plane around this coordinate.
   -- @return #boolean true if in the Radius.
   function COORDINATE:IsInRadius( Coordinate, Radius )
@@ -1848,12 +1905,12 @@ do -- COORDINATE
   -- @param #COORDINATE FromCoordinate The coordinate to measure the distance and the bearing from.
   -- @param Core.Settings#SETTINGS Settings (optional) The settings. Can be nil, and in this case the default settings are used. If you want to specify your own settings, use the _SETTINGS object.
   -- @return #string The BR text.
-  function COORDINATE:ToStringBRA( FromCoordinate, Settings )
+  function COORDINATE:ToStringBRA( FromCoordinate, Settings, Language )
     local DirectionVec3 = FromCoordinate:GetDirectionVec3( self )
     local AngleRadians =  self:GetAngleRadians( DirectionVec3 )
     local Distance = FromCoordinate:Get2DDistance( self )
     local Altitude = self:GetAltitudeText()
-    return "BRA, " .. self:GetBRAText( AngleRadians, Distance, Settings )
+    return "BRA, " .. self:GetBRAText( AngleRadians, Distance, Settings, Language )
   end
 
   --- Return a BULLS string out of the BULLS of the coalition to the COORDINATE.
@@ -1905,7 +1962,7 @@ do -- COORDINATE
 
     local LL_Accuracy = Settings and Settings.LL_Accuracy or _SETTINGS.LL_Accuracy
     local lat, lon = coord.LOtoLL( self:GetVec3() )
-    return "LL DMS, " .. UTILS.tostringLL( lat, lon, LL_Accuracy, true )
+    return "LL DMS " .. UTILS.tostringLL( lat, lon, LL_Accuracy, true )
   end
 
   --- Provides a Lat Lon string in Degree Decimal Minute format.
@@ -1916,7 +1973,7 @@ do -- COORDINATE
 
     local LL_Accuracy = Settings and Settings.LL_Accuracy or _SETTINGS.LL_Accuracy
     local lat, lon = coord.LOtoLL( self:GetVec3() )
-    return "LL DDM, " .. UTILS.tostringLL( lat, lon, LL_Accuracy, false )
+    return "LL DDM " .. UTILS.tostringLL( lat, lon, LL_Accuracy, false )
   end
 
   --- Provides a MGRS string
@@ -1928,7 +1985,7 @@ do -- COORDINATE
     local MGRS_Accuracy = Settings and Settings.MGRS_Accuracy or _SETTINGS.MGRS_Accuracy
     local lat, lon = coord.LOtoLL( self:GetVec3() )
     local MGRS = coord.LLtoMGRS( lat, lon )
-    return "MGRS, " .. UTILS.tostringMGRS( MGRS, MGRS_Accuracy )
+    return "MGRS " .. UTILS.tostringMGRS( MGRS, MGRS_Accuracy )
   end
 
   --- Provides a coordinate string of the point, based on a coordinate format system:
@@ -2004,7 +2061,7 @@ do -- COORDINATE
   -- @param Wrapper.Controllable#CONTROLLABLE Controllable
   -- @param Core.Settings#SETTINGS Settings (optional) The settings. Can be nil, and in this case the default settings are used. If you want to specify your own settings, use the _SETTINGS object.
   -- @return #string The coordinate Text in the configured coordinate system.
-  function COORDINATE:ToStringA2A( Controllable, Settings ) -- R2.2
+  function COORDINATE:ToStringA2A( Controllable, Settings, Language ) -- R2.2
   
     self:F2( { Controllable = Controllable and Controllable:GetName() } )
 
@@ -2013,23 +2070,23 @@ do -- COORDINATE
     if Settings:IsA2A_BRAA()  then
       if Controllable then
         local Coordinate = Controllable:GetCoordinate()
-        return self:ToStringBRA( Coordinate, Settings ) 
+        return self:ToStringBRA( Coordinate, Settings, Language ) 
       else
-        return self:ToStringMGRS( Settings )
+        return self:ToStringMGRS( Settings, Language )
       end
     end
     if Settings:IsA2A_BULLS() then
       local Coalition = Controllable:GetCoalition()
-      return self:ToStringBULLS( Coalition, Settings )
+      return self:ToStringBULLS( Coalition, Settings, Language )
     end
     if Settings:IsA2A_LL_DMS()  then
-      return self:ToStringLLDMS( Settings )
+      return self:ToStringLLDMS( Settings, Language )
     end
     if Settings:IsA2A_LL_DDM()  then
-      return self:ToStringLLDDM( Settings )
+      return self:ToStringLLDDM( Settings, Language )
     end
     if Settings:IsA2A_MGRS() then
-      return self:ToStringMGRS( Settings )
+      return self:ToStringMGRS( Settings, Language )
     end
 
     return nil
@@ -2040,37 +2097,38 @@ do -- COORDINATE
   --   * Uses default settings in COORDINATE.
   --   * Can be overridden if for a GROUP containing x clients, a menu was selected to override the default.
   -- @param #COORDINATE self
-  -- @param Wrapper.Controllable#CONTROLLABLE Controllable
+  -- @param Wrapper.Controllable#CONTROLLABLE Controllable The controllable to retrieve the settings from, otherwise the default settings will be chosen.
   -- @param Core.Settings#SETTINGS Settings (optional) The settings. Can be nil, and in this case the default settings are used. If you want to specify your own settings, use the _SETTINGS object.
   -- @param Tasking.Task#TASK Task The task for which coordinates need to be calculated.
   -- @return #string The coordinate Text in the configured coordinate system.
   function COORDINATE:ToString( Controllable, Settings, Task )
   
-    self:F2( { Controllable = Controllable and Controllable:GetName() } )
+--    self:E( { Controllable = Controllable and Controllable:GetName() } )
 
     local Settings = Settings or ( Controllable and _DATABASE:GetPlayerSettings( Controllable:GetPlayerName() ) ) or _SETTINGS
 
-    local ModeA2A = false
-    self:E('A2A false')
+    local ModeA2A = nil
     
     if Task then
-      self:E('Task ' .. Task.ClassName )
       if Task:IsInstanceOf( TASK_A2A ) then
         ModeA2A = true
-        self:E('A2A true')
       else
         if Task:IsInstanceOf( TASK_A2G ) then
           ModeA2A = false
         else
           if Task:IsInstanceOf( TASK_CARGO ) then
             ModeA2A = false
-          else
-            ModeA2A = false
           end
+            if Task:IsInstanceOf( TASK_CAPTURE_ZONE ) then
+              ModeA2A = false
+            end
         end
       end
-    else
-      local IsAir = Controllable and Controllable:IsAirPlane() or false
+    end
+    
+   
+    if ModeA2A == nil then
+      local IsAir = Controllable and ( Controllable:IsAirPlane() or Controllable:IsHelicopter() ) or false
       if IsAir  then
         ModeA2A = true
       else
